@@ -1,5 +1,7 @@
 #pragma once
 #include <cstdint>
+#include "Renderer2D.h"
+#include "Texture.h"
 
 struct SDL_Window;
 struct SDL_Renderer;
@@ -26,12 +28,16 @@ namespace Erlik {
         int m_width = 1280;
         int m_height = 720;
 
-        double m_time = 0.0; // seconds since start
+        double m_time = 0.0;
 
-        // Input demo state
-        float m_posX = 0.0f;
-        float m_posY = 0.0f;
+        // Demo state
+        float m_posX = 0.f, m_posY = 0.f, m_rot = 0.f, m_scale = 2.f;
         bool  m_paused = false;
+        bool  m_follow = false; // F ile aç/kapat: kamera takip modu
+
+        Renderer2D* m_r2d = nullptr;
+        Texture     m_tex;
+        Camera2D    m_cam;
     };
 
 } // namespace Erlik

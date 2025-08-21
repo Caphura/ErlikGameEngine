@@ -84,6 +84,9 @@ namespace Erlik {
             m_scale = 2.0f;
             m_cam = {};
         }
+        if (Input::keyPressed(SDL_SCANCODE_F)) {
+            m_follow = !m_follow;
+        }
 
         // Ölçek ve rotasyon
         if (Input::keyDown(SDL_SCANCODE_Q)) m_rot -= 120.0f / 60.0f;
@@ -114,6 +117,18 @@ namespace Erlik {
         m_cam.y = m_posY - m_height * 0.5f / m_cam.zoom;
 
         m_time += dt;
+        // update(double dt) içinde, WASD ile m_posX/m_posY güncelledikten sonra:
+        if (m_follow) {
+            // Takip: objeyi merkezde tut
+            m_cam.x = m_posX - m_width * 0.5f / m_cam.zoom;
+            m_cam.y = m_posY - m_height * 0.5f / m_cam.zoom;
+        }
+        else {
+            // Sabit kamera: hareketi ekranda gör
+            m_cam.x = 0.0f;
+            m_cam.y = 0.0f;
+        }
+
     }
 
     void Application::render() {
@@ -179,10 +194,14 @@ namespace Erlik {
                 fpsFrames = 0;
                 fpsTimer = 0.0;
 
+                // run() içindeki FPS baþlýðý set edildiði yerde:
                 char title[256];
                 std::snprintf(title, sizeof(title),
-                    "ErlikGameEngine | %.1f FPS%s | x=%.1f y=%.1f",
-                    currentFPS, m_paused ? " | PAUSED" : "", m_posX, m_posY);
+                    "ErlikGameEngine | %.1f FPS%s | x=%.1f y=%.1f%s",
+                    currentFPS, m_paused ? " | PAUSED" : "",
+                    m_posX, m_posY,
+                    m_follow ? " | CAM=FOLLOW" : " | CAM=FIXED"
+                );
                 SDL_SetWindowTitle(m_window, title);
             }
         }
