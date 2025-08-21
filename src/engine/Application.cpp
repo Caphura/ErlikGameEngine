@@ -30,6 +30,25 @@ void Application::processEvents(bool& running){
  if(Input::keyPressed(SDL_SCANCODE_SPACE))  m_paused=!m_paused;
  if(Input::keyPressed(SDL_SCANCODE_F))      m_follow=!m_follow;
  if(Input::keyPressed(SDL_SCANCODE_R)){ m_posX=m_width*0.5f; m_posY=m_height*0.5f; m_rot=0.f; m_scale=2.f; m_cam={}; }
+ // Anim hýzýný bariz deðiþtir (O yarýya, P iki katýna).
+ if (Input::keyPressed(SDL_SCANCODE_O) || Input::keyPressed(SDL_SCANCODE_LEFTBRACKET)) {
+     float f = m_anim.fps() * 0.5f;            // yarýya düþür
+     if (f < 1.0f) f = 1.0f;                   // alt sýnýr
+     m_anim.setFPS(f);
+ }
+ if (Input::keyPressed(SDL_SCANCODE_P) || Input::keyPressed(SDL_SCANCODE_RIGHTBRACKET)) {
+     float f = m_anim.fps() * 2.0f;            // iki katýna çýkar
+     if (f > 60.0f) f = 60.0f;                 // üst sýnýr
+     m_anim.setFPS(f);
+ }
+
+ // Hýz için hýzlý önayarlar (1-5)
+ if (Input::keyPressed(SDL_SCANCODE_1)) m_anim.setFPS(4.0f);
+ if (Input::keyPressed(SDL_SCANCODE_2)) m_anim.setFPS(8.0f);
+ if (Input::keyPressed(SDL_SCANCODE_3)) m_anim.setFPS(12.0f);
+ if (Input::keyPressed(SDL_SCANCODE_4)) m_anim.setFPS(24.0f);
+ if (Input::keyPressed(SDL_SCANCODE_5)) m_anim.setFPS(48.0f);
+
 }
 void Application::update(double dt){
  if(!m_paused){
@@ -63,8 +82,16 @@ int Application::run(){
   Input::beginFrame(); SDL_PumpEvents(); processEvents(running); Input::endFrame();
   update(dt); render();
   fpsTimer+=dt; fpsFrames++; if(fpsTimer>=0.5){ currentFPS=fpsFrames/fpsTimer; fpsFrames=0; fpsTimer=0.0;
-    char title[256]; std::snprintf(title,sizeof(title),"ErlikGameEngine | %.1f FPS%s", currentFPS, m_paused?" | PAUSED":"");
-    SDL_SetWindowTitle(m_window,title);
+  char title[256];
+  std::snprintf(title, sizeof(title),
+      "ErlikGameEngine | %.1f FPS%s | x=%.1f y=%.1f%s | anim=%.1ffps f=%d",
+      currentFPS, m_paused ? " | PAUSED" : "",
+      m_posX, m_posY,
+      m_follow ? " | CAM=FOLLOW" : " | CAM=FIXED",
+      m_anim.fps(), m_anim.index()
+  );
+  SDL_SetWindowTitle(m_window, title);
+
   }
  }
  shutdown(); return 0;
