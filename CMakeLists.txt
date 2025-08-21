@@ -13,6 +13,10 @@ add_executable(erlik
     src/engine/Texture.h
     src/engine/Renderer2D.cpp
     src/engine/Renderer2D.h
+    src/engine/SpriteAtlas.cpp
+    src/engine/SpriteAtlas.h
+    src/engine/Animator.cpp
+    src/engine/Animator.h
 )
 if (MSVC)
     target_compile_options(erlik PRIVATE /W4 /permissive- /Zc:preprocessor)
