@@ -1,1 +1,1 @@
-// inline in header
+// inline
