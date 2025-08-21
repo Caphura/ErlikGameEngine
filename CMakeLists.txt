@@ -21,6 +21,8 @@ add_executable(erlik
     src/engine/Animator.h
     src/engine/Tilemap.cpp
     src/engine/Tilemap.h
+    src/engine/Physics.cpp
+    src/engine/Physics.h
 )
 
 if (MSVC)

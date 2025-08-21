@@ -5,6 +5,7 @@
 #include "SpriteAtlas.h"
 #include "Animator.h"
 #include "Tilemap.h"
+#include "Physics.h"
 
 struct SDL_Window;
 struct SDL_Renderer;
@@ -13,8 +14,6 @@ namespace Erlik {
 
 class Application {
 public:
-    Application() = default;
-    ~Application() = default;
     int run();
 
 private:
@@ -30,23 +29,23 @@ private:
     int m_width  = 1280;
     int m_height = 720;
 
-    double m_time = 0.0;
-
-    // Demo state
-    float m_posX = 0.f, m_posY = 0.f, m_rot = 0.f, m_scale = 2.f;
-    bool  m_paused = false;
-    bool  m_follow = false;
-
+    // Render helpers
     Renderer2D* m_r2d = nullptr;
-    Texture     m_tex;        // fallback
     Camera2D    m_cam;
 
-    // Atlas + anim
+    // World
+    Tilemap     m_map;
+    Player      m_player;
+    PhysicsParams m_pp;
+
+    // Visuals
     SpriteAtlas m_atlas;
     Animator    m_anim;
 
-    // Tilemap
-    Tilemap     m_map;
+    // State
+    bool  m_paused = false;
+    bool  m_follow = true;
+    double m_time=0.0;
 };
 
 } // namespace Erlik
