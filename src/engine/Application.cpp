@@ -135,17 +135,17 @@ namespace Erlik {
         m_r2d->setCamera(m_cam);
         m_r2d->clear(12, 12, 16, 255);
 
+        m_r2d->drawGrid(64, 50, 50, 60, 255); // yeni satýr
+
         if (m_tex.sdl()) {
-            // Sprite varsa onu çiz
             m_r2d->drawTexture(m_tex, m_posX, m_posY, m_scale, m_rot);
         }
         else {
-            // Yedek kare (sprite yoksa da hareketi gör)
             const int rectW = 80, rectH = 80;
             SDL_FRect r{
                 (m_posX - m_cam.x) * m_cam.zoom - rectW * 0.5f,
                 (m_posY - m_cam.y) * m_cam.zoom - rectH * 0.5f,
-                (float)rectW, (float)rectH
+                (float)rectW,(float)rectH
             };
             SDL_SetRenderDrawColor(m_renderer, 200, 200, 220, 255);
             SDL_RenderFillRectF(m_renderer, &r);
@@ -153,6 +153,7 @@ namespace Erlik {
 
         m_r2d->present();
     }
+
 
     int Application::run() {
         if (!init()) {
