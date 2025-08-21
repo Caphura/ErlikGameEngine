@@ -1,0 +1,25 @@
+# Build artifacts
+/build/
+/out/
+/dist/
+*.obj
+*.pdb
+*.ilk
+*.log
+
+# CMake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+*.cmake
+Makefile
+
+# VS / IDE
+.vscode/
+.vs/
+*.user
+*.suo
+
+# OS
+.DS_Store
+Thumbs.db
