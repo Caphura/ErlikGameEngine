@@ -12,6 +12,7 @@ public:
     bool loadCSV(const std::string& path);
     bool loadTileset(SDL_Renderer* r, const std::string& path, int tileSize, int margin=0, int spacing=0);
 
+
     void draw(Renderer2D& r2d) const;
 
     // Queries
@@ -19,8 +20,14 @@ public:
     int rows() const { return m_rows; }
     int tileSize() const { return m_tile; }
     int get(int tx, int ty) const { if(tx<0||ty<0||tx>=m_cols||ty>=m_rows) return -1; return m_data[ty*m_cols + tx]; }
-    bool isSolid(int idx) const { return idx >= 0; }          // default: any tile index >=0 is solid
-    bool solidAtTile(int tx, int ty) const { return isSolid(get(tx,ty)); }
+    // Tilemap.h (class Tilemap içinde, public:)
+    bool isSolid(int idx)   const { return idx == 0 || idx >= 2; } // 0 ve 2..N: tam blok
+    bool isOneWay(int idx)  const { return idx == 1; }             // 1: tek yönlü
+    bool solidAtTile(int tx, int ty) const { return isSolid(get(tx, ty)); }
+    bool oneWayAtTile(int tx, int ty) const { return isOneWay(get(tx, ty)); }
+
+
+
 
 private:
     Texture m_tileset;

@@ -1,8 +1,9 @@
-#include "Application.h"
+﻿#include "Application.h"
 #include "Input.h"
 #include <SDL.h>
 #include <SDL_image.h>
 #include <cstdio>
+#include <cmath>
 
 namespace Erlik {
 
@@ -14,6 +15,7 @@ bool Application::init(){
     if((IMG_Init(flags)&flags)!=flags){
         std::fprintf(stderr,"IMG_Init failed: %s\n", IMG_GetError()); return false;
     }
+    
     m_window = SDL_CreateWindow("ErlikGameEngine", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, m_width, m_height, SDL_WINDOW_SHOWN);
     if(!m_window){ std::fprintf(stderr,"SDL_CreateWindow failed: %s\n", SDL_GetError()); return false; }
     m_renderer = SDL_CreateRenderer(m_window,-1,SDL_RENDERER_ACCELERATED);
@@ -25,12 +27,26 @@ bool Application::init(){
     if(!m_map.loadCSV("assets/level_aabb.csv")) std::fprintf(stderr,"[warn] assets/level_aabb.csv not found\n");
     if(!m_map.loadTileset(m_renderer, "assets/tileset32.png", 32)) std::fprintf(stderr,"[warn] assets/tileset32.png not found\n");
 
+    // SDL/renderer sonrası, harita yüklemeden sonra uygun bir yere:
+    Platform p;
+    p.w = 96; p.h = 16;
+    p.y = 32.f * 17.f;        // 17. satır hizası
+    p.minX = 32.f * 18.f;     // soldaki sınır (tile 18)
+    p.maxX = 32.f * 28.f;     // sağdaki sınır (tile 28)
+    p.x = p.minX;             // başlangıç
+    p.vx = 80.f;              // px/s sağa
+    m_platforms.push_back(p);
+    
     // Player start near top-left
     m_player.x = 64.f; m_player.y = 64.f; m_player.vx=0.f; m_player.vy=0.f; m_player.onGround=false;
 
     // Visual sprite
-    if(m_atlas.loadGrid(m_renderer, "assets/atlas8x1.png", 32,32,0,0)){
+    if (m_atlas.loadGrid(m_renderer, "assets/atlas8x1.png", 32, 32, 0, 0)) {
         m_anim.set(m_atlas.frameCount(), 10.f, true);
+        std::fprintf(stderr, "[atlas] frames=%d\n", m_atlas.frameCount());
+    }
+    else {
+        std::fprintf(stderr, "[warn] Atlas not found: assets/atlas8x1.png\n");
     }
 
     return true;
@@ -50,32 +66,98 @@ void Application::processEvents(bool& running){
         if(e.type==SDL_QUIT) running=false;
     }
     if(Input::keyPressed(SDL_SCANCODE_ESCAPE)) running=false;
-    if(Input::keyPressed(SDL_SCANCODE_SPACE))  m_paused = !m_paused;
+    if(Input::keyPressed(SDL_SCANCODE_I))  m_paused = !m_paused;  //Pause gamee with 
     if(Input::keyPressed(SDL_SCANCODE_F))      m_follow = !m_follow;
     if(Input::keyPressed(SDL_SCANCODE_R)){
         m_player.x=64.f; m_player.y=64.f; m_player.vx=0.f; m_player.vy=0.f; m_player.onGround=false;
         m_cam = {};
     }
+    // Anim hızını bariz değiştir (O yarıya, P iki katına; sınırlar 1..60 fps)
+    if (Input::keyPressed(SDL_SCANCODE_O)) {
+        float f = m_anim.fps() * 0.5f; if (f < 1.0f) f = 1.0f; m_anim.setFPS(f);
+    }
+    if (Input::keyPressed(SDL_SCANCODE_P)) {
+        float f = m_anim.fps() * 2.0f; if (f > 60.0f) f = 60.0f; m_anim.setFPS(f);
+    }
+
+    // Hız için hızlı önayarlar (1..5)
+    if (Input::keyPressed(SDL_SCANCODE_1)) m_anim.setFPS(4.0f);
+    if (Input::keyPressed(SDL_SCANCODE_2)) m_anim.setFPS(8.0f);
+    if (Input::keyPressed(SDL_SCANCODE_3)) m_anim.setFPS(12.0f);
+    if (Input::keyPressed(SDL_SCANCODE_4)) m_anim.setFPS(24.0f);
+    if (Input::keyPressed(SDL_SCANCODE_5)) m_anim.setFPS(48.0f);
+
 }
 
-void Application::update(double dt){
-    if(!m_paused){
-        bool left  = Input::keyDown(SDL_SCANCODE_A) || Input::keyDown(SDL_SCANCODE_LEFT);
+void Application::update(double dt) {
+    if (!m_paused) {
+        bool left = Input::keyDown(SDL_SCANCODE_A) || Input::keyDown(SDL_SCANCODE_LEFT);
         bool right = Input::keyDown(SDL_SCANCODE_D) || Input::keyDown(SDL_SCANCODE_RIGHT);
-        bool jump  = Input::keyPressed(SDL_SCANCODE_LSHIFT) || Input::keyPressed(SDL_SCANCODE_RSHIFT);
 
-        integrate(m_player, m_map, m_pp, (float)dt, left, right, jump);
+        bool jumpPressed =
+            Input::keyPressed(SDL_SCANCODE_SPACE) ||
+            Input::keyPressed(SDL_SCANCODE_W) ||
+            Input::keyPressed(SDL_SCANCODE_LSHIFT) ||
+            Input::keyPressed(SDL_SCANCODE_RSHIFT);
+
+        bool jumpHeld =
+            Input::keyDown(SDL_SCANCODE_SPACE) ||
+            Input::keyDown(SDL_SCANCODE_W) ||
+            Input::keyDown(SDL_SCANCODE_LSHIFT) ||
+            Input::keyDown(SDL_SCANCODE_RSHIFT);
+
+        // Aşağı + zıplama: S veya ↓ basılıyken zıplama tuşu basıldıysa drop-through iste
+        bool downHeld = Input::keyDown(SDL_SCANCODE_S) || Input::keyDown(SDL_SCANCODE_DOWN);
+        bool dropRequest = downHeld && (jumpPressed || jumpHeld);
+
+
+        // Fizik çağrısı (YENİ imza!)
+        integrate(m_player, m_map, m_pp, (float)dt, left, right, jumpPressed, jumpHeld, dropRequest);
+
+
+        // 1) Platformları hareket ettir
+        for (auto& pl : m_platforms) {
+            pl.x += pl.vx * (float)dt;
+            if (pl.x < pl.minX) { pl.x = pl.minX; pl.vx = -pl.vx; }
+            if (pl.x + pl.w > pl.maxX) { pl.x = pl.maxX - pl.w; pl.vx = -pl.vx; }
+        }
+
+        // 2) Üstten temas varsa “carry” uygula
+        for (auto& pl : m_platforms) {
+            const float px0 = m_player.x - m_player.halfW;
+            const float px1 = m_player.x + m_player.halfW;
+            const float py1 = m_player.y + m_player.halfH;
+            const float prevBottom = m_player.prevY + m_player.halfH;
+
+            const bool overlapX = (px1 > pl.x) && (px0 < pl.x + pl.w);
+            const bool comingDownFromAbove = (m_player.vy >= 0.f) && (prevBottom <= pl.y);
+
+            if (overlapX && comingDownFromAbove && py1 >= pl.y && py1 <= pl.y + 20.f) {
+                // üstüne bin
+                m_player.y = pl.y - m_player.halfH;
+                m_player.vy = 0.f;
+                m_player.onGround = true;
+
+                // carry gücü: input yoksa 1.0, varsa 0.3
+                bool hasInput = left || right;
+                float carryStrength = hasInput ? 0.3f : 1.0f;
+                m_player.x += pl.vx * (float)dt * carryStrength;
+            }
+        }
+
+        // Animasyon
         m_anim.update(dt);
     }
 
-    // Camera
-    if(m_follow){
-        m_cam.x = m_player.x - m_width  * 0.5f / m_cam.zoom;
+    // Kamera
+    if (m_follow) {
+        m_cam.x = m_player.x - m_width * 0.5f / m_cam.zoom;
         m_cam.y = m_player.y - m_height * 0.5f / m_cam.zoom;
     }
-
     m_time += dt;
 }
+
+
 
 void Application::render(){
     m_r2d->setCamera(m_cam);
@@ -84,6 +166,18 @@ void Application::render(){
 
     // Draw tilemap
     m_map.draw(*m_r2d);
+
+    //render() içinde platformu çiz (debug):
+    for (auto& pl : m_platforms) {
+        SDL_FRect r{
+            (pl.x - m_cam.x) * m_cam.zoom,
+            (pl.y - m_cam.y) * m_cam.zoom,
+            pl.w * m_cam.zoom, pl.h * m_cam.zoom
+        };
+        SDL_SetRenderDrawColor(m_renderer, 180, 140, 80, 255);
+        SDL_RenderFillRectF(m_renderer, &r);
+    }
+
 
     // Draw player sprite (or fallback rect)
     const SDL_Rect* fr = m_atlas.frame(m_anim.index());
@@ -99,18 +193,24 @@ void Application::render(){
     }
 
     // HUD title
-    static double accum=0.0; static int frames=0; static double fps=0.0;
+    static double accum=0.0; static int frames=0; static double fps=0.0; int tile = m_map.tileSize();
+    int underRow = (int)std::floor((m_player.y + m_player.halfH + 0.1f) / tile);
+    int underL = m_map.get((int)std::floor((m_player.x - m_player.halfW + 1.0f) / tile), underRow);
+    int underR = m_map.get((int)std::floor((m_player.x + m_player.halfW - 1.0f) / tile), underRow);
     accum += 1.0/60.0; frames++;
     if(frames>=30){
+        // HUD title (DOĞRU SÜRÜM)
         char title[256];
         std::snprintf(title, sizeof(title),
-            "ErlikGameEngine | player(%.1f,%.1f) v=(%.1f,%.1f) %s%s",
+            "Erlik | pos(%.1f,%.1f) v=(%.1f,%.1f) %s%s anim=%.1ff f=%d | under=[%d,%d] drop=%.2f",
             m_player.x, m_player.y, m_player.vx, m_player.vy,
-            m_paused? " | PAUSED":"",
-            m_player.onGround? " | GROUND":""
+            m_paused ? " | PAUSED" : "",
+            m_player.onGround ? " | GROUND" : "",
+            m_anim.fps(), m_anim.index(),
+            underL, underR, m_player.dropTimer
         );
         SDL_SetWindowTitle(m_window, title);
-        frames=0; accum=0.0;
+
     }
 
     m_r2d->present();
