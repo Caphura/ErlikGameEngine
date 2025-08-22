@@ -8,8 +8,9 @@ struct Player {
     float vx=0.f, vy=0.f;
     bool onGround=false;
     float halfW=12.f, halfH=16.f; // 24x32 kapsayan kutu
-    float coyoteTimer = 0.f;
-    float jumpBufferTimer = 0.f;
+    float prevX = 0.f, prevY = 0.f;
+    float dropTimer = 0.f;        // one-way'i geçici olarak yok saymak için
+    float coyoteTimer = 0.f, jumpBufferTimer = 0.f;
 
 };
 
@@ -20,6 +21,7 @@ struct PhysicsParams {
     float accel = 12.f;
     float maxFall = 900.f;
     float jumpVel = -900.f;
+    float dropThroughTime = 0.18f; // Down+Jump ile aşağı sarkınca ne kadar süre one-way yok sayılacak
 
     // Önceden eklediklerimiz:
     float coyoteTime = 0.10f;
@@ -33,9 +35,9 @@ struct PhysicsParams {
     float jumpCutFactor = 0.5f; // tuş bırakılınca yukarı hızla çarp (0.5 = %50)
 };
 
-// İMZA: jumpPressed + jumpHeld
+// İMZA: jumpPressed + jumpHeld ++ dropRequest
 void integrate(Player& p, const Tilemap& map, const PhysicsParams& pp, float dt,
-    bool moveLeft, bool moveRight, bool jumpPressed, bool jumpHeld);
+    bool moveLeft, bool moveRight, bool jumpPressed, bool jumpHeld, bool dropRequest);
 
 
 } // namespace Erlik
