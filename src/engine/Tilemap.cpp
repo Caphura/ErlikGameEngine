@@ -32,6 +32,13 @@ bool Tilemap::loadTileset(SDL_Renderer* r, const std::string& path, int tileSize
     return m_tileset.loadFromFile(r, path);
 }
 
+bool Tilemap::adoptGrid(int cols, int rows, int tileSize, std::vector<int> data) {
+    if (cols <= 0 || rows <= 0 || tileSize <= 0) return false;
+    m_cols = cols; m_rows = rows; m_tile = tileSize;
+    m_data = std::move(data);
+    return true;
+}
+
 void Tilemap::draw(Renderer2D& r2d) const{
     if(!m_tileset.sdl() || m_cols<=0 || m_rows<=0) return;
 

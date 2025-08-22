@@ -31,6 +31,14 @@ endif()
 
 find_package(SDL2 CONFIG REQUIRED)
 find_package(SDL2_image CONFIG REQUIRED)
+find_package(nlohmann_json CONFIG REQUIRED)
 
-target_link_libraries(erlik PRIVATE SDL2::SDL2 SDL2::SDL2main SDL2_image::SDL2_image)
+target_link_libraries(erlik PRIVATE
+    SDL2::SDL2 SDL2::SDL2main SDL2_image::SDL2_image
+    nlohmann_json::nlohmann_json
+)
 target_include_directories(erlik PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_sources(erlik PRIVATE
+    src/engine/TMJMap.cpp
+    src/engine/TMJMap.h
+)
