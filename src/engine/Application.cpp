@@ -156,7 +156,41 @@ void Application::update(double dt) {
             }
         }
 
-        // Animasyon
+        // --- Animation state ---
+        float vx = m_player.vx, vy = m_player.vy;
+        bool onGround = m_player.onGround;
+
+        // Yönü güncelle (ölü bölge ile)
+        if (vx > 20.f) m_faceRight = true;
+        if (vx < -20.f) m_faceRight = false;
+
+        // State kararı
+        if (!onGround) {
+            m_state = (vy < -30.f) ? AnimState::Jump : AnimState::Fall;
+        }
+        else {
+            m_state = (std::fabs(vx) > 25.f) ? AnimState::Run : AnimState::Idle;
+        }
+
+        // State → anim aralığı ve hız
+        // atlas8x1.png: [0..3]=Idle, [4..7]=Run varsayıyoruz
+        switch (m_state) {
+        case AnimState::Idle:
+            m_anim.setRange(0, 4, 6.0f, true);
+            break;
+        case AnimState::Run: {
+            // hızla senkron fps (4..16 arası)
+            float k = std::clamp(std::fabs(vx) / m_pp.moveSpeed, 0.f, 1.f);
+            m_anim.setRange(4, 4, 4.0f + 12.0f * k, true);
+            break;
+        }
+        case AnimState::Jump:
+            m_anim.setRange(0, 1, 1.0f, false); // tek kare
+            break;
+        case AnimState::Fall:
+            m_anim.setRange(1, 1, 1.0f, false);
+            break;
+        }
         m_anim.update(dt);
     }
 
@@ -218,9 +252,11 @@ void Application::render(){
 
     // Draw player sprite (or fallback rect)
     const SDL_Rect* fr = m_atlas.frame(m_anim.index());
-    if(fr){
-        m_r2d->drawTextureRegion(m_atlas.texture(), *fr, m_player.x, m_player.y, 1.6f, 0.0f);
-    }else{
+    if (fr) {
+        SDL_RendererFlip flip = m_faceRight ? SDL_FLIP_NONE : SDL_FLIP_HORIZONTAL;
+        m_r2d->drawTextureRegion(m_atlas.texture(), *fr, m_player.x, m_player.y, 1.6f, 0.0f, flip);
+    }
+    else {
         const int rectW=24, rectH=32;
         SDL_FRect r{ (m_player.x - m_cam.x)*m_cam.zoom - rectW*0.5f,
                      (m_player.y - m_cam.y)*m_cam.zoom - rectH*0.5f,

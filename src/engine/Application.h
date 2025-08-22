@@ -19,6 +19,8 @@ namespace Erlik {
         float minX = 0.f, maxX = 0.f; // yatay salýným sýnýrlarý
     };
 
+    enum class AnimState { Idle, Run, Jump, Fall };
+
     class Application {
     public:
         int run();
@@ -49,6 +51,10 @@ namespace Erlik {
         SpriteAtlas m_atlas;
         Animator    m_anim;
 
+        // Anim state (YALNIZCA ÜYE OLARAK!)
+        AnimState m_state = AnimState::Idle;
+        bool      m_faceRight = true;
+
         // State
         bool  m_paused = false;
         bool  m_follow = true;
@@ -56,6 +62,10 @@ namespace Erlik {
 
         // Platforms
         std::vector<Platform> m_platforms;
+
+        //Cam Lerp
+        float m_camLerp = 8.0f;   // ne kadar hýzlý takip etsin (8–12 iyi)
+        int   m_worldW = 0, m_worldH = 0; // tilemap’ten hesaplayacaðýz
     };
 
 } // namespace Erlik
