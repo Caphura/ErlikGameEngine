@@ -7,23 +7,56 @@ namespace Erlik {
     static inline int tileFloor(float v, float tile) { return (int)std::floor(v / tile); }
 
     void integrate(Player& p, const Tilemap& map, const PhysicsParams& pp, float dt,
-        bool moveLeft, bool moveRight, bool jumpPressed, bool jumpHeld)
+        bool moveLeft, bool moveRight, bool jumpPressed, bool jumpHeld, bool dropRequest)
     {
         const float tile = (float)map.tileSize();
         const float eps = 0.001f;
 
-        // one-way & moving platform için önceki konumu sakla
+        // önceki konum
         p.prevX = p.x;
         p.prevY = p.y;
 
-        // Sayaçlar
-        if (jumpPressed) p.jumpBufferTimer = pp.jumpBufferTime;
-        else             p.jumpBufferTimer = std::max(0.f, p.jumpBufferTimer - dt);
+        // drop-through zamanlayıcısı
+        p.dropTimer = std::max(0.f, p.dropTimer - dt);
+
+        // Ayağın altında one-way var mı? (outer 'tile'ı kullan, İÇERİDE yeniden tanımlama YOK!)
+        bool onewayUnder = false;
+        {
+            const float bottom = p.y + p.halfH + 0.1f;
+            const int   rowUnder = (int)std::floor(bottom / tile);
+            const int   tx0 = (int)std::floor((p.x - p.halfW + 1.0f) / tile);
+            const int   tx1 = (int)std::floor((p.x + p.halfW - 1.0f) / tile);
+            for (int tx = tx0; tx <= tx1; ++tx) {
+                if (map.oneWayAtTile(tx, rowUnder)) { onewayUnder = true; break; }
+            }
+        }
+
+        // Geçerli drop isteği: S+Jump ve zeminde ve altında one-way
+        const bool doDrop = dropRequest && p.onGround && onewayUnder;
+        if (doDrop) {
+            p.dropTimer = pp.dropThroughTime;
+            p.onGround = false;           // hemen serbest bırak
+            p.jumpBufferTimer = 0.f;      // bu framede jump’ı iptal et
+            if (p.vy < 30.f) p.vy = 30.f; // aşağı doğru minik itki
+        }
+
+        // --- JUMP/COYOTE sayaçları (önce sayaçları güncelle) ---
+        // --- JUMP/COYOTE sayaçları ---
+        if (!doDrop) {
+            if (jumpPressed) p.jumpBufferTimer = pp.jumpBufferTime;
+            else             p.jumpBufferTimer = std::max(0.f, p.jumpBufferTimer - dt);
+        }
+        else {
+            // Drop anında jump tamamen bastırılsın
+            p.jumpBufferTimer = 0.f;
+            p.coyoteTimer = 0.f;
+        }
 
         if (p.onGround)  p.coyoteTimer = pp.coyoteTime;
         else             p.coyoteTimer = std::max(0.f, p.coyoteTimer - dt);
 
-        // Hedef yatay hız
+
+        // --- Hedef yatay hız + sürtünme ---
         float targetVX = 0.f;
         if (moveLeft)  targetVX -= pp.moveSpeed;
         if (moveRight) targetVX += pp.moveSpeed;
@@ -31,7 +64,6 @@ namespace Erlik {
         float blend = p.onGround ? pp.accel : pp.accel * pp.airControl;
         p.vx = p.vx + (targetVX - p.vx) * std::clamp(blend * dt, 0.f, 1.f);
 
-        // Sürtünme (tuşa basılmıyorsa)
         if (targetVX == 0.f) {
             float mu = p.onGround ? pp.frictionGround : pp.frictionAir;
             float factor = std::max(0.f, 1.f - mu * dt);
@@ -39,22 +71,19 @@ namespace Erlik {
             if (std::fabs(p.vx) < 0.01f) p.vx = 0.f;
         }
 
-        // Zıplama (coyote + buffer)
-        if (p.jumpBufferTimer > 0.f && (p.onGround || p.coyoteTimer > 0.f)) {
+        // --- Zıplama (tek yer! drop varsa çalışmasın) ---
+        if (!doDrop && p.jumpBufferTimer > 0.f && (p.onGround || p.coyoteTimer > 0.f)) {
             p.vy = pp.jumpVel;
             p.onGround = false;
             p.jumpBufferTimer = 0.f;
             p.coyoteTimer = 0.f;
         }
 
-        // Yerçekimi
+        // --- Yerçekimi + jump-cut ---
         p.vy += pp.gravity * dt;
         if (p.vy > pp.maxFall) p.vy = pp.maxFall;
+        if (p.vy < 0.f && !jumpHeld) p.vy *= pp.jumpCutFactor;
 
-        // Jump-cut (tuş bırakıldıysa yukarı hızı kırp)
-        if (p.vy < 0.f && !jumpHeld) {
-            p.vy *= pp.jumpCutFactor;
-        }
 
         // -------- STEP X --------
         p.x += p.vx * dt;
@@ -122,14 +151,13 @@ namespace Erlik {
             if (p.vy > 0.f) { // aşağı
                 int row = tileFloor(bottom, tile);
                 for (int tx = tx0; tx <= tx1; ++tx) {
-                    // Tek yönlü platform desteğini Tilemap'te ekleyeceğiz (isOneWay):
                     bool solid = map.solidAtTile(tx, row);
                     bool oneway = map.oneWayAtTile(tx, row);
-
                     float tileTop = row * tile;
                     float prevBottom = p.prevY + p.halfH;
 
-                    if (solid || (oneway && prevBottom <= tileTop)) {
+                    const bool onewayCounts = oneway && (p.dropTimer <= 0.f) && (prevBottom <= tileTop);
+                    if (solid || onewayCounts) {
                         p.y = tileTop - p.halfH - eps;
                         p.vy = 0.f;
                         p.onGround = true;
@@ -144,12 +172,11 @@ namespace Erlik {
                     for (int tx = tx0; tx <= tx1; ++tx) {
                         bool solid = map.solidAtTile(tx, rowSnap);
                         bool oneway = map.oneWayAtTile(tx, rowSnap);
-
                         float tileTop = rowSnap * tile;
                         float prevBottom = p.prevY + p.halfH;
 
-                        if (solid || (oneway && prevBottom <= tileTop)) {
-
+                        const bool onewayCounts = oneway && (p.dropTimer <= 0.f) && (prevBottom <= tileTop);
+                        if (solid || onewayCounts) {
                             float dist = tileTop - bottom;
                             if (dist >= 0.f && dist <= snap) {
                                 p.y += dist; p.vy = 0.f; p.onGround = true;
