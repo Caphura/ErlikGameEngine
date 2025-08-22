@@ -82,13 +82,20 @@ void Application::update(double dt) {
     if (!m_paused) {
         bool left = Input::keyDown(SDL_SCANCODE_A) || Input::keyDown(SDL_SCANCODE_LEFT);
         bool right = Input::keyDown(SDL_SCANCODE_D) || Input::keyDown(SDL_SCANCODE_RIGHT);
+
         bool jumpPressed =
             Input::keyPressed(SDL_SCANCODE_SPACE) ||
             Input::keyPressed(SDL_SCANCODE_W) ||
             Input::keyPressed(SDL_SCANCODE_LSHIFT) ||
             Input::keyPressed(SDL_SCANCODE_RSHIFT);
 
-        integrate(m_player, m_map, m_pp, (float)dt, left, right, jumpPressed);
+        bool jumpHeld =
+            Input::keyDown(SDL_SCANCODE_SPACE) ||
+            Input::keyDown(SDL_SCANCODE_W) ||
+            Input::keyDown(SDL_SCANCODE_LSHIFT) ||
+            Input::keyDown(SDL_SCANCODE_RSHIFT);
+
+        integrate(m_player, m_map, m_pp, (float)dt, left, right, jumpPressed, jumpHeld);
 
         // <<< EKLE
         m_anim.update(dt);

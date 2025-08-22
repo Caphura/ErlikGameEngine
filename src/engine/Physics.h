@@ -8,19 +8,34 @@ struct Player {
     float vx=0.f, vy=0.f;
     bool onGround=false;
     float halfW=12.f, halfH=16.f; // 24x32 kapsayan kutu
+    float coyoteTimer = 0.f;
+    float jumpBufferTimer = 0.f;
+
 };
 
 struct PhysicsParams {
-    float gravity = 1800.f;     // px/s^2
-    float moveSpeed = 260.f;    // hedef yatay hız
-    float airControl = 0.6f;    // havada hız karışımı
-    float accel = 12.f;         // yatay hız blend katsayısı
-    float maxFall = 900.f;      // terminal hız
-    float jumpVel = -900.f;     // sıçrama hızı
+    float gravity = 1800.f;
+    float moveSpeed = 260.f;
+    float airControl = 0.6f;
+    float accel = 12.f;
+    float maxFall = 900.f;
+    float jumpVel = -900.f;
+
+    // Önceden eklediklerimiz:
+    float coyoteTime = 0.10f;
+    float jumpBufferTime = 0.12f;
+    float groundSnapDist = 3.0f;
+    int   stepMaxPixels = 8;
+
+    // YENİ: sürtünme ve kısa zıplama
+    float frictionGround = 20.f; // px/s sürtünme katsayısı
+    float frictionAir = 1.f; // havada hafif sönüm
+    float jumpCutFactor = 0.5f; // tuş bırakılınca yukarı hızla çarp (0.5 = %50)
 };
 
-// Tile bazlı AABB çözümü (önce X sonra Y)
+// İMZA: jumpPressed + jumpHeld
 void integrate(Player& p, const Tilemap& map, const PhysicsParams& pp, float dt,
-               bool moveLeft, bool moveRight, bool jump);
+    bool moveLeft, bool moveRight, bool jumpPressed, bool jumpHeld);
+
 
 } // namespace Erlik
