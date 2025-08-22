@@ -4,6 +4,7 @@
 #include <SDL_image.h>
 #include <cstdio>
 #include <cmath>
+#include <algorithm>  // std::clamp, std::max
 
 namespace Erlik {
 
@@ -26,6 +27,11 @@ bool Application::init(){
     // World setup
     if(!m_map.loadCSV("assets/level_aabb.csv")) std::fprintf(stderr,"[warn] assets/level_aabb.csv not found\n");
     if(!m_map.loadTileset(m_renderer, "assets/tileset32.png", 32)) std::fprintf(stderr,"[warn] assets/tileset32.png not found\n");
+
+    // Dünya boyutunu hesaplama
+    m_worldW = m_map.cols() * m_map.tileSize();
+    m_worldH = m_map.rows() * m_map.tileSize();
+
 
     // SDL/renderer sonrası, harita yüklemeden sonra uygun bir yere:
     Platform p;
@@ -86,6 +92,11 @@ void Application::processEvents(bool& running){
     if (Input::keyPressed(SDL_SCANCODE_3)) m_anim.setFPS(12.0f);
     if (Input::keyPressed(SDL_SCANCODE_4)) m_anim.setFPS(24.0f);
     if (Input::keyPressed(SDL_SCANCODE_5)) m_anim.setFPS(48.0f);
+
+    // Zoom: Z küçült, X büyüt (0.5x..3x)
+    if (Input::keyPressed(SDL_SCANCODE_Z)) { m_cam.zoom *= 0.8f; if (m_cam.zoom < 0.5f) m_cam.zoom = 0.5f; }
+    if (Input::keyPressed(SDL_SCANCODE_X)) { m_cam.zoom *= 1.25f; if (m_cam.zoom > 3.0f) m_cam.zoom = 3.0f; }
+
 
 }
 
@@ -150,10 +161,36 @@ void Application::update(double dt) {
     }
 
     // Kamera
+    // Kamera takibi (lerp + clamp)
+    int vw, vh; m_r2d->outputSize(vw, vh);
     if (m_follow) {
-        m_cam.x = m_player.x - m_width * 0.5f / m_cam.zoom;
-        m_cam.y = m_player.y - m_height * 0.5f / m_cam.zoom;
+        const float targetX = m_player.x - (vw * 0.5f) / m_cam.zoom;
+        const float targetY = m_player.y - (vh * 0.5f) / m_cam.zoom;
+
+        // Exponential-like lerp
+        const float t = std::clamp(m_camLerp * (float)dt, 0.0f, 1.0f);
+        m_cam.x += (targetX - m_cam.x) * t;
+        m_cam.y += (targetY - m_cam.y) * t;
+
+        // Dünya sınırı (viewport’u dışarı taşırma)
+        const float maxX = std::max(0.0f, (float)m_worldW - vw / m_cam.zoom);
+        const float maxY = std::max(0.0f, (float)m_worldH - vh / m_cam.zoom);
+        m_cam.x = std::clamp(m_cam.x, 0.0f, maxX);
+        m_cam.y = std::clamp(m_cam.y, 0.0f, maxY);
+
+        // (isteğe bağlı) piksel snap: titremeyi azaltır
+        m_cam.x = std::floor(m_cam.x);
+        m_cam.y = std::floor(m_cam.y);
     }
+    else {
+        // Fix modunda da clamp uygula
+        const float maxX = std::max(0.0f, (float)m_worldW - vw / m_cam.zoom);
+        const float maxY = std::max(0.0f, (float)m_worldH - vh / m_cam.zoom);
+        m_cam.x = std::clamp(m_cam.x, 0.0f, maxX);
+        m_cam.y = std::clamp(m_cam.y, 0.0f, maxY);
+    }
+
+
     m_time += dt;
 }
 
