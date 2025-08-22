@@ -11,7 +11,8 @@ public:
     // CSV: rows separated by '\n', columns by ',' ; -1 = empty
     bool loadCSV(const std::string& path);
     bool loadTileset(SDL_Renderer* r, const std::string& path, int tileSize, int margin=0, int spacing=0);
-
+    // Collision grid'i dýþarýdan yerleþtirmek için:
+    bool adoptGrid(int cols, int rows, int tileSize, std::vector<int> data);
 
     void draw(Renderer2D& r2d) const;
 
