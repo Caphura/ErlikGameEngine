@@ -14,6 +14,7 @@ bool Application::init(){
     if((IMG_Init(flags)&flags)!=flags){
         std::fprintf(stderr,"IMG_Init failed: %s\n", IMG_GetError()); return false;
     }
+    
     m_window = SDL_CreateWindow("ErlikGameEngine", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, m_width, m_height, SDL_WINDOW_SHOWN);
     if(!m_window){ std::fprintf(stderr,"SDL_CreateWindow failed: %s\n", SDL_GetError()); return false; }
     m_renderer = SDL_CreateRenderer(m_window,-1,SDL_RENDERER_ACCELERATED);
@@ -29,8 +30,12 @@ bool Application::init(){
     m_player.x = 64.f; m_player.y = 64.f; m_player.vx=0.f; m_player.vy=0.f; m_player.onGround=false;
 
     // Visual sprite
-    if(m_atlas.loadGrid(m_renderer, "assets/atlas8x1.png", 32,32,0,0)){
+    if (m_atlas.loadGrid(m_renderer, "assets/atlas8x1.png", 32, 32, 0, 0)) {
         m_anim.set(m_atlas.frameCount(), 10.f, true);
+        std::fprintf(stderr, "[atlas] frames=%d\n", m_atlas.frameCount());
+    }
+    else {
+        std::fprintf(stderr, "[warn] Atlas not found: assets/atlas8x1.png\n");
     }
 
     return true;
@@ -50,32 +55,52 @@ void Application::processEvents(bool& running){
         if(e.type==SDL_QUIT) running=false;
     }
     if(Input::keyPressed(SDL_SCANCODE_ESCAPE)) running=false;
-    if(Input::keyPressed(SDL_SCANCODE_SPACE))  m_paused = !m_paused;
+    if(Input::keyPressed(SDL_SCANCODE_I))  m_paused = !m_paused;  //Pause gamee with 
     if(Input::keyPressed(SDL_SCANCODE_F))      m_follow = !m_follow;
     if(Input::keyPressed(SDL_SCANCODE_R)){
         m_player.x=64.f; m_player.y=64.f; m_player.vx=0.f; m_player.vy=0.f; m_player.onGround=false;
         m_cam = {};
     }
+    // Anim hýzýný bariz deðiþtir (O yarýya, P iki katýna; sýnýrlar 1..60 fps)
+    if (Input::keyPressed(SDL_SCANCODE_O)) {
+        float f = m_anim.fps() * 0.5f; if (f < 1.0f) f = 1.0f; m_anim.setFPS(f);
+    }
+    if (Input::keyPressed(SDL_SCANCODE_P)) {
+        float f = m_anim.fps() * 2.0f; if (f > 60.0f) f = 60.0f; m_anim.setFPS(f);
+    }
+
+    // Hýz için hýzlý önayarlar (1..5)
+    if (Input::keyPressed(SDL_SCANCODE_1)) m_anim.setFPS(4.0f);
+    if (Input::keyPressed(SDL_SCANCODE_2)) m_anim.setFPS(8.0f);
+    if (Input::keyPressed(SDL_SCANCODE_3)) m_anim.setFPS(12.0f);
+    if (Input::keyPressed(SDL_SCANCODE_4)) m_anim.setFPS(24.0f);
+    if (Input::keyPressed(SDL_SCANCODE_5)) m_anim.setFPS(48.0f);
+
 }
 
-void Application::update(double dt){
-    if(!m_paused){
-        bool left  = Input::keyDown(SDL_SCANCODE_A) || Input::keyDown(SDL_SCANCODE_LEFT);
+void Application::update(double dt) {
+    if (!m_paused) {
+        bool left = Input::keyDown(SDL_SCANCODE_A) || Input::keyDown(SDL_SCANCODE_LEFT);
         bool right = Input::keyDown(SDL_SCANCODE_D) || Input::keyDown(SDL_SCANCODE_RIGHT);
-        bool jump  = Input::keyPressed(SDL_SCANCODE_LSHIFT) || Input::keyPressed(SDL_SCANCODE_RSHIFT);
+        bool jumpPressed =
+            Input::keyPressed(SDL_SCANCODE_SPACE) ||
+            Input::keyPressed(SDL_SCANCODE_W) ||
+            Input::keyPressed(SDL_SCANCODE_LSHIFT) ||
+            Input::keyPressed(SDL_SCANCODE_RSHIFT);
 
-        integrate(m_player, m_map, m_pp, (float)dt, left, right, jump);
+        integrate(m_player, m_map, m_pp, (float)dt, left, right, jumpPressed);
+
+        // <<< EKLE
         m_anim.update(dt);
     }
 
-    // Camera
-    if(m_follow){
-        m_cam.x = m_player.x - m_width  * 0.5f / m_cam.zoom;
+    if (m_follow) {
+        m_cam.x = m_player.x - m_width * 0.5f / m_cam.zoom;
         m_cam.y = m_player.y - m_height * 0.5f / m_cam.zoom;
     }
-
     m_time += dt;
 }
+
 
 void Application::render(){
     m_r2d->setCamera(m_cam);
@@ -102,15 +127,19 @@ void Application::render(){
     static double accum=0.0; static int frames=0; static double fps=0.0;
     accum += 1.0/60.0; frames++;
     if(frames>=30){
+        // HUD title (DOÐRU SÜRÜM)
         char title[256];
         std::snprintf(title, sizeof(title),
-            "ErlikGameEngine | player(%.1f,%.1f) v=(%.1f,%.1f) %s%s",
-            m_player.x, m_player.y, m_player.vx, m_player.vy,
-            m_paused? " | PAUSED":"",
-            m_player.onGround? " | GROUND":""
+            "ErlikGameEngine | player(%.1f,%.1f) v=(%.1f,%.1f) %s%s anim=%.1ffps f=%d",
+            m_player.x, m_player.y,                 // %.1f, %.1f
+            m_player.vx, m_player.vy,               // %.1f, %.1f
+            m_paused ? " | PAUSED" : "",            // %s
+            m_player.onGround ? " | GROUND" : "",   // %s
+            m_anim.fps(),                           // %.1f
+            m_anim.index()                          // %d
         );
         SDL_SetWindowTitle(m_window, title);
-        frames=0; accum=0.0;
+
     }
 
     m_r2d->present();
