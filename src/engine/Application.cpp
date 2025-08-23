@@ -3,8 +3,9 @@
 #include <SDL.h>
 #include <SDL_image.h>
 #include <cstdio>
-#include <cmath>
-#include <algorithm>  // std::clamp, std::max
+#include <cmath>      // std::floor
+#include <cstring>    // std::strlen, std::strncpy
+#include <algorithm>  // std::clamp, std::min, std::max
 
 namespace Erlik {
 
@@ -43,11 +44,15 @@ bool Application::init(){
                 m_tmj.buildCollision(m_map, "collision", "oneway");
                 m_worldW = m_tmj.cols() * m_tmj.tileW();
                 m_worldH = m_tmj.rows() * m_tmj.tileH();
+
+                notifyHUD("Reload OK (TMJ)", SDL_Color{ 40,200, 90,255 }, 1.5f);
             }
             else {
                 std::fprintf(stderr, "[hotreload] TMJ reload FAILED: %s\n", m_tmjPath.c_str());
+                notifyHUD("Reload FAIL (TMJ)", SDL_Color{ 220, 60, 60,255 }, 2.0f);
             }
             });
+
 
     }
     else {
@@ -127,8 +132,10 @@ void Application::processEvents(bool& running){
 
     if (Input::keyPressed(SDL_SCANCODE_F5)) {
         std::fprintf(stderr, "[hotreload] manual check\n");
-        m_res.check(true); // force: kayıtlı tüm dosyaları yeniden yükle
+        notifyHUD("Reload CHECK…", SDL_Color{ 70,130,200,255 }, 0.6f);
+        m_res.check(true);
     }
+
 
 
 
@@ -159,6 +166,10 @@ void Application::update(double dt) {
         // Fizik çağrısı (YENİ imza!)
         integrate(m_player, m_map, m_pp, (float)dt, left, right, jumpPressed, jumpHeld, dropRequest);
 
+        //UPDATE içinde süreyi azalt
+        if (m_hudTimer > 0.f) {
+            m_hudTimer = std::max(0.f, m_hudTimer - (float)dt);
+        }
 
         // 1) Platformları hareket ettir
         for (auto& pl : m_platforms) {
@@ -317,10 +328,39 @@ void Application::render(){
             m_paused ? " | PAUSED" : "",
             m_player.onGround ? " | GROUND" : "",
             m_anim.fps(), m_anim.index(),
-            underL, underR, m_player.dropTimer
-        );
+            underL, underR, m_player.dropTimer);
+            if (m_hudTimer > 0.f && m_hudText[0] != '\0') {
+                size_t len = std::strlen(title);
+                std::snprintf(title + len, sizeof(title) - len, " | %s", m_hudText);
+            }
         SDL_SetWindowTitle(m_window, title);
 
+    }
+    // clear() sonrasında, world çizmeden hemen önce (veya en sonda da olur):
+    if (m_hudTimer > 0.f) {
+        int vw, vh; m_r2d->outputSize(vw, vh);
+
+        // Yumuşak görünüm için alfa: ilk 0.15s fade-in, son 0.3s fade-out
+        float a = 1.0f;
+        if (m_hudTimer < 0.3f) a = m_hudTimer / 0.3f;
+        else if (m_hudTimer > 1.35f) a = std::clamp(1.5f - m_hudTimer, 0.f, 1.f);
+
+        Uint8 alpha = (Uint8)std::round(220.f * a);
+
+        SDL_SetRenderDrawBlendMode(m_renderer, SDL_BLENDMODE_BLEND);
+
+        // Arka plan siyah şerit
+        SDL_SetRenderDrawColor(m_renderer, 0, 0, 0, (Uint8)(140 * a));
+        SDL_FRect bg{ 10.f, 10.f, (float)std::min(vw - 20, 420), 28.f };
+        SDL_RenderFillRectF(m_renderer, &bg);
+
+        // Sol kenarda renkli durum çubuğu (OK yeşil / FAIL kırmızı)
+        SDL_SetRenderDrawColor(m_renderer, m_hudColor.r, m_hudColor.g, m_hudColor.b, alpha);
+        SDL_FRect bar{ bg.x + 4.f, bg.y + 4.f, 8.f, bg.h - 8.f };
+        SDL_RenderFillRectF(m_renderer, &bar);
+
+        // Blend modunu geri al (isteğe bağlı)
+        SDL_SetRenderDrawBlendMode(m_renderer, SDL_BLENDMODE_NONE);
     }
 
     m_r2d->present();
@@ -343,5 +383,23 @@ int Application::run(){
     shutdown();
     return 0;
 }
+
+void Application::notifyHUD(const char* msg, SDL_Color col, float seconds)
+{
+    const char* safe = msg ? msg : "";
+#ifdef _MSC_VER
+    // MSVC'de güvenli sürüm
+    strncpy_s(m_hudText, sizeof(m_hudText), safe, _TRUNCATE);
+#else
+    // Diğer derleyiciler için güvenli kullanım
+    std::strncpy(m_hudText, safe, sizeof(m_hudText) - 1);
+    m_hudText[sizeof(m_hudText) - 1] = '\0';
+#endif
+
+    m_hudColor = col;
+    m_hudTimer = seconds > 0.f ? seconds : 0.f;
+}
+
+
 
 } // namespace Erlik
