@@ -3,8 +3,9 @@
 #include <SDL.h>
 #include <SDL_image.h>
 #include <cstdio>
-#include <cmath>
-#include <algorithm>  // std::clamp, std::max
+#include <cmath>      // std::floor
+#include <cstring>    // std::strlen, std::strncpy
+#include <algorithm>  // std::clamp, std::min, std::max
 
 namespace Erlik {
 
@@ -43,11 +44,15 @@ bool Application::init(){
                 m_tmj.buildCollision(m_map, "collision", "oneway");
                 m_worldW = m_tmj.cols() * m_tmj.tileW();
                 m_worldH = m_tmj.rows() * m_tmj.tileH();
+
+                notifyHUD("Reload OK (TMJ)", SDL_Color{ 40,200, 90,255 }, 1.5f);
             }
             else {
                 std::fprintf(stderr, "[hotreload] TMJ reload FAILED: %s\n", m_tmjPath.c_str());
+                notifyHUD("Reload FAIL (TMJ)", SDL_Color{ 220, 60, 60,255 }, 2.0f);
             }
             });
+
 
     }
     else {
@@ -58,6 +63,30 @@ bool Application::init(){
         m_worldH = m_map.rows() * m_map.tileSize();
     }
 
+    // renderer kurulumundan sonra:
+    if (!m_text.init(m_renderer, m_fontPath, 14)) {
+        std::fprintf(stderr, "[dbg] TTF load failed (%s) -> overlay text disabled\n", m_fontPath);
+    }
+
+    bool fontOK = m_text.init(m_renderer, m_fontPath, 14);
+    if (!fontOK) {
+        // Windows klasik fontu + muhtemel asset yollarını dene
+        const char* fallbacks[] = {
+            "C:/Windows/Fonts/arial.ttf",
+            "assets/DejaVuSans.ttf",
+            "assets/fonts/DejaVuSans.ttf"
+        };
+        for (const char* fb : fallbacks) {
+            if (m_text.init(m_renderer, fb, 14)) {
+                std::fprintf(stderr, "[dbg] TTF fallback loaded: %s\n", fb);
+                fontOK = true;
+                break;
+            }
+        }
+        if (!fontOK) {
+            std::fprintf(stderr, "[dbg] TTF load failed (tried %s and fallbacks)\n", m_fontPath);
+        }
+    }
 
 
 
@@ -94,45 +123,64 @@ void Application::shutdown(){
     IMG_Quit(); SDL_Quit();
 }
 
-void Application::processEvents(bool& running){
+void Application::processEvents(bool& running) {
     SDL_Event e;
-    while(SDL_PollEvent(&e)){
-        if(e.type==SDL_QUIT) running=false;
-    }
-    if(Input::keyPressed(SDL_SCANCODE_ESCAPE)) running=false;
-    if(Input::keyPressed(SDL_SCANCODE_I))  m_paused = !m_paused;  //Pause gamee with 
-    if(Input::keyPressed(SDL_SCANCODE_F))      m_follow = !m_follow;
-    if(Input::keyPressed(SDL_SCANCODE_R)){
-        m_player.x=64.f; m_player.y=64.f; m_player.vx=0.f; m_player.vy=0.f; m_player.onGround=false;
-        m_cam = {};
-    }
-    // Anim hızını bariz değiştir (O yarıya, P iki katına; sınırlar 1..60 fps)
-    if (Input::keyPressed(SDL_SCANCODE_O)) {
-        float f = m_anim.fps() * 0.5f; if (f < 1.0f) f = 1.0f; m_anim.setFPS(f);
-    }
-    if (Input::keyPressed(SDL_SCANCODE_P)) {
-        float f = m_anim.fps() * 2.0f; if (f > 60.0f) f = 60.0f; m_anim.setFPS(f);
+    while (SDL_PollEvent(&e)) {
+        if (e.type == SDL_QUIT) running = false;
     }
 
-    // Hız için hızlı önayarlar (1..5)
+    if (Input::keyPressed(SDL_SCANCODE_ESCAPE)) running = false;
+    if (Input::keyPressed(SDL_SCANCODE_I))      m_paused = !m_paused;
+    if (Input::keyPressed(SDL_SCANCODE_F))      m_follow = !m_follow;
+
+    if (Input::keyPressed(SDL_SCANCODE_R)) {
+        m_player.x = 64.f; m_player.y = 64.f; m_player.vx = 0.f; m_player.vy = 0.f; m_player.onGround = false;
+        m_cam = {};
+    }
+
+    // Anim hız önayarları
+    if (Input::keyPressed(SDL_SCANCODE_O)) { float f = m_anim.fps() * 0.5f; if (f < 1.0f) f = 1.0f; m_anim.setFPS(f); }
+    if (Input::keyPressed(SDL_SCANCODE_P)) { float f = m_anim.fps() * 2.0f; if (f > 60.0f) f = 60.0f; m_anim.setFPS(f); }
     if (Input::keyPressed(SDL_SCANCODE_1)) m_anim.setFPS(4.0f);
     if (Input::keyPressed(SDL_SCANCODE_2)) m_anim.setFPS(8.0f);
     if (Input::keyPressed(SDL_SCANCODE_3)) m_anim.setFPS(12.0f);
     if (Input::keyPressed(SDL_SCANCODE_4)) m_anim.setFPS(24.0f);
     if (Input::keyPressed(SDL_SCANCODE_5)) m_anim.setFPS(48.0f);
 
-    // Zoom: Z küçült, X büyüt (0.5x..3x)
-    if (Input::keyPressed(SDL_SCANCODE_Z)) { m_cam.zoom *= 0.8f; if (m_cam.zoom < 0.5f) m_cam.zoom = 0.5f; }
+    // Zoom
+    if (Input::keyPressed(SDL_SCANCODE_Z)) { m_cam.zoom *= 0.8f;  if (m_cam.zoom < 0.5f) m_cam.zoom = 0.5f; }
     if (Input::keyPressed(SDL_SCANCODE_X)) { m_cam.zoom *= 1.25f; if (m_cam.zoom > 3.0f) m_cam.zoom = 3.0f; }
 
+    // Hot reload
     if (Input::keyPressed(SDL_SCANCODE_F5)) {
         std::fprintf(stderr, "[hotreload] manual check\n");
-        m_res.check(true); // force: kayıtlı tüm dosyaları yeniden yükle
+        notifyHUD("Reload CHECK…", SDL_Color{ 70,130,200,255 }, 0.6f);
+        m_res.check(true);
     }
 
+    // Overlay toggle
+    if (Input::keyPressed(SDL_SCANCODE_F1)) {
+        m_dbgOverlay = !m_dbgOverlay;
+        std::fprintf(stderr, "[dbg] overlay = %s\n", m_dbgOverlay ? "ON" : "OFF");
+        notifyHUD(m_dbgOverlay ? "Debug ON" : "Debug OFF",
+            SDL_Color{ 70,130,200,255 }, 0.8f);
+    }
 
-
+    // Layer toggles (BUNLAR FONKSİYON İÇİNDE KALMALI)
+    if (Input::keyPressed(SDL_SCANCODE_7)) {
+        m_dbgShowBG = !m_dbgShowBG;
+        notifyHUD(m_dbgShowBG ? "BG ON" : "BG OFF", SDL_Color{ 180,180,180,255 }, 0.8f);
+    }
+    if (Input::keyPressed(SDL_SCANCODE_8)) {
+        m_dbgShowFG = !m_dbgShowFG;
+        notifyHUD(m_dbgShowFG ? "FG ON" : "FG OFF", SDL_Color{ 180,180,180,255 }, 0.8f);
+    }
+    if (Input::keyPressed(SDL_SCANCODE_9)) {
+        m_dbgShowCol = !m_dbgShowCol;
+        notifyHUD(m_dbgShowCol ? "COL ON" : "COL OFF", SDL_Color{ 200,120,60,255 }, 0.8f);
+    }
 }
+
 
 void Application::update(double dt) {
     if (!m_paused) {
@@ -159,6 +207,10 @@ void Application::update(double dt) {
         // Fizik çağrısı (YENİ imza!)
         integrate(m_player, m_map, m_pp, (float)dt, left, right, jumpPressed, jumpHeld, dropRequest);
 
+        //UPDATE içinde süreyi azalt
+        if (m_hudTimer > 0.f) {
+            m_hudTimer = std::max(0.f, m_hudTimer - (float)dt);
+        }
 
         // 1) Platformları hareket ettir
         for (auto& pl : m_platforms) {
@@ -190,7 +242,9 @@ void Application::update(double dt) {
             }
         }
 
-        m_res.check(false); // pasif kontrol: dosya tarihi değişmişse reload eder
+        m_r2d->beginFrame();   // her frame başı
+        m_res.check(false);    // hot-reload dosya izleme (zaten eklemiştik)
+
 
         // --- Animation state ---
         float vx = m_player.vx, vy = m_player.vy;
@@ -229,6 +283,15 @@ void Application::update(double dt) {
         }
         m_anim.update(dt);
     }
+
+    // FPS hesapla (dt>0 ise). Exponential smoothing: new = (1/dt)*a + old*(1-a)
+    if (dt > 0.0) {
+        float inst = (float)(1.0 / dt);
+        float a = m_fpsSmooth;          // 0.10 gibi
+        if (m_currentFPS <= 0.0f) m_currentFPS = inst;  // ilk frame
+        else m_currentFPS = m_currentFPS * (1.0f - a) + inst * a;
+    }
+
 
     // Kamera
     // Kamera takibi (lerp + clamp)
@@ -270,10 +333,9 @@ void Application::render(){
     m_r2d->setCamera(m_cam);
     m_r2d->clear(12, 12, 16, 255);
 
-    // 1) BG/Decor
-    m_tmj.drawBelowPlayer(*m_r2d);
+    if (m_dbgShowBG) m_tmj.drawBelowPlayer(*m_r2d);
 
-    // 2) Player
+    // Player
     if (const SDL_Rect* fr = m_atlas.frame(m_anim.index())) {
         SDL_RendererFlip flip = m_faceRight ? SDL_FLIP_NONE : SDL_FLIP_HORIZONTAL;
         m_r2d->drawTextureRegion(m_atlas.texture(), *fr, m_player.x, m_player.y, 1.6f, 0.0f, flip);
@@ -288,7 +350,46 @@ void Application::render(){
     }
 
     // 3) FG katmanlar
-    m_tmj.drawAbovePlayer(*m_r2d);;
+    if (m_dbgShowFG) m_tmj.drawAbovePlayer(*m_r2d);
+
+    // Collision heatmap (debug)
+   // if (m_dbgCol && (m_dbgOverlay || m_dbgShowCol)) { /* varsa eski isim, aşağıdakiyle uyumlu yap */ }
+    if (m_dbgOverlay) {
+        // Panel arka plan (görsel kanıt)
+        int vw, vh; m_r2d->outputSize(vw, vh);
+        SDL_SetRenderDrawBlendMode(m_renderer, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(m_renderer, 0, 0, 0, 140);
+        SDL_FRect bg{ (float)vw - 240.f, 10.f, 230.f, 96.f };
+        SDL_RenderFillRectF(m_renderer, &bg);
+        SDL_SetRenderDrawBlendMode(m_renderer, SDL_BLENDMODE_NONE);
+
+        if (m_text.ready()) {
+            char line[128];
+            std::snprintf(line, sizeof(line), "FPS: %.1f", m_currentFPS);
+            m_text.draw(line, (int)bg.x + 12, (int)bg.y + 10, SDL_Color{ 220,220,220,255 });
+
+            std::snprintf(line, sizeof(line), "DrawCalls: %d", m_r2d->drawCalls());
+            m_text.draw(line, (int)bg.x + 12, (int)bg.y + 30, SDL_Color{ 220,220,220,255 });
+
+            std::snprintf(line, sizeof(line), "BG[7]: %s", m_dbgShowBG ? "ON" : "OFF");
+            m_text.draw(line, (int)bg.x + 12, (int)bg.y + 52, SDL_Color{ 180,180,180,255 });
+
+            std::snprintf(line, sizeof(line), "FG[8]: %s", m_dbgShowFG ? "ON" : "OFF");
+            m_text.draw(line, (int)bg.x + 120, (int)bg.y + 52, SDL_Color{ 180,180,180,255 });
+
+            std::snprintf(line, sizeof(line), "COL[9]: %s", m_dbgShowCol ? "ON" : "OFF");
+            m_text.draw(line, (int)bg.x + 12, (int)bg.y + 74, SDL_Color{ 200,180,120,255 });
+        }
+        else {
+            // Font yoksa, pencere başlığına kısa özet yaz (fallback)
+            char title[128];
+            std::snprintf(title, sizeof(title), "FPS %.1f | DC %d | Overlay (no font)",
+                m_currentFPS, m_r2d->drawCalls());
+            SDL_SetWindowTitle(m_window, title);
+        }
+    }
+
+
 
 
     //render() içinde platformu çiz (debug):
@@ -317,10 +418,39 @@ void Application::render(){
             m_paused ? " | PAUSED" : "",
             m_player.onGround ? " | GROUND" : "",
             m_anim.fps(), m_anim.index(),
-            underL, underR, m_player.dropTimer
-        );
+            underL, underR, m_player.dropTimer);
+            if (m_hudTimer > 0.f && m_hudText[0] != '\0') {
+                size_t len = std::strlen(title);
+                std::snprintf(title + len, sizeof(title) - len, " | %s", m_hudText);
+            }
         SDL_SetWindowTitle(m_window, title);
 
+    }
+    // clear() sonrasında, world çizmeden hemen önce (veya en sonda da olur):
+    if (m_hudTimer > 0.f) {
+        int vw, vh; m_r2d->outputSize(vw, vh);
+
+        // Yumuşak görünüm için alfa: ilk 0.15s fade-in, son 0.3s fade-out
+        float a = 1.0f;
+        if (m_hudTimer < 0.3f) a = m_hudTimer / 0.3f;
+        else if (m_hudTimer > 1.35f) a = std::clamp(1.5f - m_hudTimer, 0.f, 1.f);
+
+        Uint8 alpha = (Uint8)std::round(220.f * a);
+
+        SDL_SetRenderDrawBlendMode(m_renderer, SDL_BLENDMODE_BLEND);
+
+        // Arka plan siyah şerit
+        SDL_SetRenderDrawColor(m_renderer, 0, 0, 0, (Uint8)(140 * a));
+        SDL_FRect bg{ 10.f, 10.f, (float)std::min(vw - 20, 420), 28.f };
+        SDL_RenderFillRectF(m_renderer, &bg);
+
+        // Sol kenarda renkli durum çubuğu (OK yeşil / FAIL kırmızı)
+        SDL_SetRenderDrawColor(m_renderer, m_hudColor.r, m_hudColor.g, m_hudColor.b, alpha);
+        SDL_FRect bar{ bg.x + 4.f, bg.y + 4.f, 8.f, bg.h - 8.f };
+        SDL_RenderFillRectF(m_renderer, &bar);
+
+        // Blend modunu geri al (isteğe bağlı)
+        SDL_SetRenderDrawBlendMode(m_renderer, SDL_BLENDMODE_NONE);
     }
 
     m_r2d->present();
@@ -343,5 +473,23 @@ int Application::run(){
     shutdown();
     return 0;
 }
+
+void Application::notifyHUD(const char* msg, SDL_Color col, float seconds)
+{
+    const char* safe = msg ? msg : "";
+#ifdef _MSC_VER
+    // MSVC'de güvenli sürüm
+    strncpy_s(m_hudText, sizeof(m_hudText), safe, _TRUNCATE);
+#else
+    // Diğer derleyiciler için güvenli kullanım
+    std::strncpy(m_hudText, safe, sizeof(m_hudText) - 1);
+    m_hudText[sizeof(m_hudText) - 1] = '\0';
+#endif
+
+    m_hudColor = col;
+    m_hudTimer = seconds > 0.f ? seconds : 0.f;
+}
+
+
 
 } // namespace Erlik
