@@ -9,9 +9,10 @@ namespace Erlik {
     class TMJMap {
     public:
         bool load(SDL_Renderer* r, const std::string& tmjPath);
+        void draw(Renderer2D& r2d) const;             // hepsini çizer (debug)
+        void drawBelowPlayer(Renderer2D& r2d) const;  // fg=false olanlarý çizer
+        void drawAbovePlayer(Renderer2D& r2d) const;  // fg=true olanlarý çizer
 
-        // Çizim (katman sýrasýna göre, parallax + opacity destekli)
-        void draw(Renderer2D& r2d) const;
 
         // Fizik için collision grid üret (Tilemap’e doldurur)
         // collisionLayerName="collision", oneWayLayerName="oneway"
@@ -35,6 +36,11 @@ namespace Erlik {
             float  parallaxY = 1.0f;
             float  offsetX = 0.0f; // layer offset
             float  offsetY = 0.0f;
+
+            // YENÝ: Tiled Layer Properties
+            bool propCollision = false;
+            bool propOneWay = false;
+            bool propFG = false;   // <-- FG katmaný mý?
         };
 
         // Tiled gid flip bayraklarý
