@@ -9,6 +9,9 @@
 #include "Physics.h"
 #include "TMJMap.h"
 #include "ResourceManager.h"
+#include <SDL.h>   // SDL_Color için
+#include "TextRenderer.h"
+
 
 struct SDL_Window;
 struct SDL_Renderer;
@@ -33,6 +36,12 @@ namespace Erlik {
         void processEvents(bool& running);
         void update(double dt);
         void render();
+        // Debug overlay
+        bool m_dbgOverlay = false;
+        bool m_dbgShowBG = true;
+        bool m_dbgShowFG = true;
+        bool m_dbgShowCol = false; // collision heatmap
+        
 
     private:
         SDL_Window* m_window = nullptr;
@@ -40,10 +49,22 @@ namespace Erlik {
         int m_width = 1280;
         int m_height = 720;
 
+        TextRenderer m_text;
+        const char* m_fontPath = "assets/DejaVuSans.ttf"; // deðiþtirilebilir
+
+        float m_currentFPS = 0.0f;   // FPS göstergesi (exponential smoothing)
+        float m_fpsSmooth = 0.10f;   // 0.1 iyi bir baþlangýç
+
         // Kaynak & hot reload
         ResourceManager m_res;
         std::string     m_tmjPath; // izlediðimiz tmj dosyasý
-
+        
+        // --- HUD: HotReload bildirimi ---
+        float     m_hudTimer = 0.f;         // saniye
+        SDL_Color m_hudColor{ 0,0,0,0 };     // banner rengi
+        char      m_hudText[160]{ 0 };       // baþlýða eklenecek kýsa metin
+        void notifyHUD(const char* msg, SDL_Color col, float seconds = 1.5f);
+        
         //TMJMap
         TMJMap      m_tmj;        // çok katman çizim
         Tilemap     m_map;        // fizik için grid (collision + oneway)

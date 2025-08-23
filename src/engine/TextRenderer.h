@@ -28,6 +28,8 @@ namespace Erlik {
             SDL_RenderCopyF(m_r, t, nullptr, &dst);
             SDL_DestroyTexture(t);
         }
+        bool ready() const { return m_font != nullptr; }
+
     private:
         SDL_Renderer* m_r = nullptr;
         TTF_Font* m_font = nullptr;

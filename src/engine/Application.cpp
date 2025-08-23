@@ -68,6 +68,25 @@ bool Application::init(){
         std::fprintf(stderr, "[dbg] TTF load failed (%s) -> overlay text disabled\n", m_fontPath);
     }
 
+    bool fontOK = m_text.init(m_renderer, m_fontPath, 14);
+    if (!fontOK) {
+        // Windows klasik fontu + muhtemel asset yollarını dene
+        const char* fallbacks[] = {
+            "C:/Windows/Fonts/arial.ttf",
+            "assets/DejaVuSans.ttf",
+            "assets/fonts/DejaVuSans.ttf"
+        };
+        for (const char* fb : fallbacks) {
+            if (m_text.init(m_renderer, fb, 14)) {
+                std::fprintf(stderr, "[dbg] TTF fallback loaded: %s\n", fb);
+                fontOK = true;
+                break;
+            }
+        }
+        if (!fontOK) {
+            std::fprintf(stderr, "[dbg] TTF load failed (tried %s and fallbacks)\n", m_fontPath);
+        }
+    }
 
 
 
@@ -104,37 +123,35 @@ void Application::shutdown(){
     IMG_Quit(); SDL_Quit();
 }
 
-void Application::processEvents(bool& running){
+void Application::processEvents(bool& running) {
     SDL_Event e;
-    while(SDL_PollEvent(&e)){
-        if(e.type==SDL_QUIT) running=false;
-    }
-    if(Input::keyPressed(SDL_SCANCODE_ESCAPE)) running=false;
-    if(Input::keyPressed(SDL_SCANCODE_I))  m_paused = !m_paused;  //Pause gamee with 
-    if(Input::keyPressed(SDL_SCANCODE_F))      m_follow = !m_follow;
-    if(Input::keyPressed(SDL_SCANCODE_R)){
-        m_player.x=64.f; m_player.y=64.f; m_player.vx=0.f; m_player.vy=0.f; m_player.onGround=false;
-        m_cam = {};
-    }
-    // Anim hızını bariz değiştir (O yarıya, P iki katına; sınırlar 1..60 fps)
-    if (Input::keyPressed(SDL_SCANCODE_O)) {
-        float f = m_anim.fps() * 0.5f; if (f < 1.0f) f = 1.0f; m_anim.setFPS(f);
-    }
-    if (Input::keyPressed(SDL_SCANCODE_P)) {
-        float f = m_anim.fps() * 2.0f; if (f > 60.0f) f = 60.0f; m_anim.setFPS(f);
+    while (SDL_PollEvent(&e)) {
+        if (e.type == SDL_QUIT) running = false;
     }
 
-    // Hız için hızlı önayarlar (1..5)
+    if (Input::keyPressed(SDL_SCANCODE_ESCAPE)) running = false;
+    if (Input::keyPressed(SDL_SCANCODE_I))      m_paused = !m_paused;
+    if (Input::keyPressed(SDL_SCANCODE_F))      m_follow = !m_follow;
+
+    if (Input::keyPressed(SDL_SCANCODE_R)) {
+        m_player.x = 64.f; m_player.y = 64.f; m_player.vx = 0.f; m_player.vy = 0.f; m_player.onGround = false;
+        m_cam = {};
+    }
+
+    // Anim hız önayarları
+    if (Input::keyPressed(SDL_SCANCODE_O)) { float f = m_anim.fps() * 0.5f; if (f < 1.0f) f = 1.0f; m_anim.setFPS(f); }
+    if (Input::keyPressed(SDL_SCANCODE_P)) { float f = m_anim.fps() * 2.0f; if (f > 60.0f) f = 60.0f; m_anim.setFPS(f); }
     if (Input::keyPressed(SDL_SCANCODE_1)) m_anim.setFPS(4.0f);
     if (Input::keyPressed(SDL_SCANCODE_2)) m_anim.setFPS(8.0f);
     if (Input::keyPressed(SDL_SCANCODE_3)) m_anim.setFPS(12.0f);
     if (Input::keyPressed(SDL_SCANCODE_4)) m_anim.setFPS(24.0f);
     if (Input::keyPressed(SDL_SCANCODE_5)) m_anim.setFPS(48.0f);
 
-    // Zoom: Z küçült, X büyüt (0.5x..3x)
-    if (Input::keyPressed(SDL_SCANCODE_Z)) { m_cam.zoom *= 0.8f; if (m_cam.zoom < 0.5f) m_cam.zoom = 0.5f; }
+    // Zoom
+    if (Input::keyPressed(SDL_SCANCODE_Z)) { m_cam.zoom *= 0.8f;  if (m_cam.zoom < 0.5f) m_cam.zoom = 0.5f; }
     if (Input::keyPressed(SDL_SCANCODE_X)) { m_cam.zoom *= 1.25f; if (m_cam.zoom > 3.0f) m_cam.zoom = 3.0f; }
 
+    // Hot reload
     if (Input::keyPressed(SDL_SCANCODE_F5)) {
         std::fprintf(stderr, "[hotreload] manual check\n");
         notifyHUD("Reload CHECK…", SDL_Color{ 70,130,200,255 }, 0.6f);
@@ -144,9 +161,12 @@ void Application::processEvents(bool& running){
     // Overlay toggle
     if (Input::keyPressed(SDL_SCANCODE_F1)) {
         m_dbgOverlay = !m_dbgOverlay;
-        notifyHUD(m_dbgOverlay ? "Debug ON" : "Debug OFF", SDL_Color{ 70,130,200,255 }, 0.8f);
+        std::fprintf(stderr, "[dbg] overlay = %s\n", m_dbgOverlay ? "ON" : "OFF");
+        notifyHUD(m_dbgOverlay ? "Debug ON" : "Debug OFF",
+            SDL_Color{ 70,130,200,255 }, 0.8f);
     }
-    // Layer toggles
+
+    // Layer toggles (BUNLAR FONKSİYON İÇİNDE KALMALI)
     if (Input::keyPressed(SDL_SCANCODE_7)) {
         m_dbgShowBG = !m_dbgShowBG;
         notifyHUD(m_dbgShowBG ? "BG ON" : "BG OFF", SDL_Color{ 180,180,180,255 }, 0.8f);
@@ -159,8 +179,8 @@ void Application::processEvents(bool& running){
         m_dbgShowCol = !m_dbgShowCol;
         notifyHUD(m_dbgShowCol ? "COL ON" : "COL OFF", SDL_Color{ 200,120,60,255 }, 0.8f);
     }
-
 }
+
 
 void Application::update(double dt) {
     if (!m_paused) {
@@ -264,6 +284,15 @@ void Application::update(double dt) {
         m_anim.update(dt);
     }
 
+    // FPS hesapla (dt>0 ise). Exponential smoothing: new = (1/dt)*a + old*(1-a)
+    if (dt > 0.0) {
+        float inst = (float)(1.0 / dt);
+        float a = m_fpsSmooth;          // 0.10 gibi
+        if (m_currentFPS <= 0.0f) m_currentFPS = inst;  // ilk frame
+        else m_currentFPS = m_currentFPS * (1.0f - a) + inst * a;
+    }
+
+
     // Kamera
     // Kamera takibi (lerp + clamp)
     int vw, vh; m_r2d->outputSize(vw, vh);
@@ -325,25 +354,42 @@ void Application::render(){
 
     // Collision heatmap (debug)
    // if (m_dbgCol && (m_dbgOverlay || m_dbgShowCol)) { /* varsa eski isim, aşağıdakiyle uyumlu yap */ }
-    if (m_dbgShowCol) {
-        int cols = m_map.cols(), rows = m_map.rows(), ts = m_map.tileSize();
-        for (int ty = 0; ty < rows; ++ty) {
-            for (int tx = 0; tx < cols; ++tx) {
-                int v = m_map.get(tx, ty); // <-- at() yerine get()
-                if (v < 0) continue;
-                SDL_Color c = (v == 0) ? SDL_Color{ 255,50,50,100 } : SDL_Color{ 255,220,40,90 };
-                SDL_SetRenderDrawBlendMode(m_renderer, SDL_BLENDMODE_BLEND);
-                SDL_SetRenderDrawColor(m_renderer, c.r, c.g, c.b, c.a);
-                SDL_FRect r{
-                    (tx * ts - m_cam.x) * m_cam.zoom,
-                    (ty * ts - m_cam.y) * m_cam.zoom,
-                    ts * m_cam.zoom, ts * m_cam.zoom
-                };
-                SDL_RenderFillRectF(m_renderer, &r);
-            }
-        }
+    if (m_dbgOverlay) {
+        // Panel arka plan (görsel kanıt)
+        int vw, vh; m_r2d->outputSize(vw, vh);
+        SDL_SetRenderDrawBlendMode(m_renderer, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(m_renderer, 0, 0, 0, 140);
+        SDL_FRect bg{ (float)vw - 240.f, 10.f, 230.f, 96.f };
+        SDL_RenderFillRectF(m_renderer, &bg);
         SDL_SetRenderDrawBlendMode(m_renderer, SDL_BLENDMODE_NONE);
+
+        if (m_text.ready()) {
+            char line[128];
+            std::snprintf(line, sizeof(line), "FPS: %.1f", m_currentFPS);
+            m_text.draw(line, (int)bg.x + 12, (int)bg.y + 10, SDL_Color{ 220,220,220,255 });
+
+            std::snprintf(line, sizeof(line), "DrawCalls: %d", m_r2d->drawCalls());
+            m_text.draw(line, (int)bg.x + 12, (int)bg.y + 30, SDL_Color{ 220,220,220,255 });
+
+            std::snprintf(line, sizeof(line), "BG[7]: %s", m_dbgShowBG ? "ON" : "OFF");
+            m_text.draw(line, (int)bg.x + 12, (int)bg.y + 52, SDL_Color{ 180,180,180,255 });
+
+            std::snprintf(line, sizeof(line), "FG[8]: %s", m_dbgShowFG ? "ON" : "OFF");
+            m_text.draw(line, (int)bg.x + 120, (int)bg.y + 52, SDL_Color{ 180,180,180,255 });
+
+            std::snprintf(line, sizeof(line), "COL[9]: %s", m_dbgShowCol ? "ON" : "OFF");
+            m_text.draw(line, (int)bg.x + 12, (int)bg.y + 74, SDL_Color{ 200,180,120,255 });
+        }
+        else {
+            // Font yoksa, pencere başlığına kısa özet yaz (fallback)
+            char title[128];
+            std::snprintf(title, sizeof(title), "FPS %.1f | DC %d | Overlay (no font)",
+                m_currentFPS, m_r2d->drawCalls());
+            SDL_SetWindowTitle(m_window, title);
+        }
     }
+
+
 
 
     //render() içinde platformu çiz (debug):
