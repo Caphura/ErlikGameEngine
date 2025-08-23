@@ -39,6 +39,7 @@ target_link_libraries(erlik PRIVATE
 )
 target_include_directories(erlik PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_sources(erlik PRIVATE
+    src/engine/ResourceManager.cpp
     src/engine/TMJMap.cpp
     src/engine/TMJMap.h
 )

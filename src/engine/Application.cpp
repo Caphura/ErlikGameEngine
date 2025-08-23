@@ -28,19 +28,27 @@ bool Application::init(){
    // if(!m_map.loadCSV("assets/level_aabb.csv")) std::fprintf(stderr,"[warn] assets/level_aabb.csv not found\n");
     //if(!m_map.loadTileset(m_renderer, "assets/tileset32.png", 32)) std::fprintf(stderr,"[warn] assets/tileset32.png not found\n");
     // TMJ yükle
-    const char* TMJ_PATH = "assets/level_city.tmj"; // senin dosyan
-    if (m_tmj.load(m_renderer, TMJ_PATH)) {
-        std::fprintf(stderr, "[info] TMJ loaded: %s\n", TMJ_PATH);
-
-        // Dünya boyutu kamera clamp için
+    // World setup (TMJ)
+    m_tmjPath = "assets/level_city.tmj"; // kendi dosya yolun
+    if (m_tmj.load(m_renderer, m_tmjPath)) {
+        std::fprintf(stderr, "[info] TMJ loaded: %s\n", m_tmjPath.c_str());
+        m_tmj.buildCollision(m_map, "collision", "oneway");
         m_worldW = m_tmj.cols() * m_tmj.tileW();
         m_worldH = m_tmj.rows() * m_tmj.tileH();
 
-        // Çarpışma gridini üret (isim + property destekli)
-        bool okCol = m_tmj.buildCollision(m_map, "collision", "oneway");
-        if (!okCol) {
-            std::fprintf(stderr, "[warn] TMJ collision build produced empty grid (check layer names/properties)\n");
-        }
+        // --- Hot Reload: TMJ dosyasını izle
+        m_res.track(m_tmjPath, [this]() {
+            if (m_tmj.load(m_renderer, m_tmjPath)) {
+                std::fprintf(stderr, "[hotreload] TMJ reloaded: %s\n", m_tmjPath.c_str());
+                m_tmj.buildCollision(m_map, "collision", "oneway");
+                m_worldW = m_tmj.cols() * m_tmj.tileW();
+                m_worldH = m_tmj.rows() * m_tmj.tileH();
+            }
+            else {
+                std::fprintf(stderr, "[hotreload] TMJ reload FAILED: %s\n", m_tmjPath.c_str());
+            }
+            });
+
     }
     else {
         std::fprintf(stderr, "[warn] TMJ load FAILED, fallback CSV\n");
@@ -49,6 +57,7 @@ bool Application::init(){
         m_worldW = m_map.cols() * m_map.tileSize();
         m_worldH = m_map.rows() * m_map.tileSize();
     }
+
 
 
 
@@ -116,6 +125,12 @@ void Application::processEvents(bool& running){
     if (Input::keyPressed(SDL_SCANCODE_Z)) { m_cam.zoom *= 0.8f; if (m_cam.zoom < 0.5f) m_cam.zoom = 0.5f; }
     if (Input::keyPressed(SDL_SCANCODE_X)) { m_cam.zoom *= 1.25f; if (m_cam.zoom > 3.0f) m_cam.zoom = 3.0f; }
 
+    if (Input::keyPressed(SDL_SCANCODE_F5)) {
+        std::fprintf(stderr, "[hotreload] manual check\n");
+        m_res.check(true); // force: kayıtlı tüm dosyaları yeniden yükle
+    }
+
+
 
 }
 
@@ -174,6 +189,8 @@ void Application::update(double dt) {
                 m_player.x += pl.vx * (float)dt * carryStrength;
             }
         }
+
+        m_res.check(false); // pasif kontrol: dosya tarihi değişmişse reload eder
 
         // --- Animation state ---
         float vx = m_player.vx, vy = m_player.vy;
