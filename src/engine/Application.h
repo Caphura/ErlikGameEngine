@@ -7,6 +7,7 @@
 #include "Animator.h"
 #include "Tilemap.h"
 #include "Physics.h"
+#include "TMJMap.h"
 
 struct SDL_Window;
 struct SDL_Renderer;
@@ -38,12 +39,15 @@ namespace Erlik {
         int m_width = 1280;
         int m_height = 720;
 
+        //TMJMap
+        TMJMap      m_tmj;        // çok katman çizim
+        Tilemap     m_map;        // fizik için grid (collision + oneway)
+
         // Render
         Renderer2D* m_r2d = nullptr;
         Camera2D    m_cam;
 
         // World
-        Tilemap       m_map;
         Player        m_player;
         PhysicsParams m_pp;
 

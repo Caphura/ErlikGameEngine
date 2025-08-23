@@ -25,12 +25,31 @@ bool Application::init(){
     Input::init();
 
     // World setup
-    if(!m_map.loadCSV("assets/level_aabb.csv")) std::fprintf(stderr,"[warn] assets/level_aabb.csv not found\n");
-    if(!m_map.loadTileset(m_renderer, "assets/tileset32.png", 32)) std::fprintf(stderr,"[warn] assets/tileset32.png not found\n");
+   // if(!m_map.loadCSV("assets/level_aabb.csv")) std::fprintf(stderr,"[warn] assets/level_aabb.csv not found\n");
+    //if(!m_map.loadTileset(m_renderer, "assets/tileset32.png", 32)) std::fprintf(stderr,"[warn] assets/tileset32.png not found\n");
+    // TMJ yükle
+    const char* TMJ_PATH = "assets/level_city.tmj"; // senin dosyan
+    if (m_tmj.load(m_renderer, TMJ_PATH)) {
+        std::fprintf(stderr, "[info] TMJ loaded: %s\n", TMJ_PATH);
 
-    // Dünya boyutunu hesaplama
-    m_worldW = m_map.cols() * m_map.tileSize();
-    m_worldH = m_map.rows() * m_map.tileSize();
+        // Dünya boyutu kamera clamp için
+        m_worldW = m_tmj.cols() * m_tmj.tileW();
+        m_worldH = m_tmj.rows() * m_tmj.tileH();
+
+        // Çarpışma gridini üret (isim + property destekli)
+        bool okCol = m_tmj.buildCollision(m_map, "collision", "oneway");
+        if (!okCol) {
+            std::fprintf(stderr, "[warn] TMJ collision build produced empty grid (check layer names/properties)\n");
+        }
+    }
+    else {
+        std::fprintf(stderr, "[warn] TMJ load FAILED, fallback CSV\n");
+        m_map.loadCSV("assets/level_aabb.csv");
+        m_map.loadTileset(m_renderer, "assets/tileset32.png", 32);
+        m_worldW = m_map.cols() * m_map.tileSize();
+        m_worldH = m_map.rows() * m_map.tileSize();
+    }
+
 
 
     // SDL/renderer sonrası, harita yüklemeden sonra uygun bir yere:
@@ -232,11 +251,28 @@ void Application::update(double dt) {
 
 void Application::render(){
     m_r2d->setCamera(m_cam);
-    m_r2d->clear(12,12,16,255);
-    m_r2d->drawGrid(64,50,50,60,255);
+    m_r2d->clear(12, 12, 16, 255);
 
-    // Draw tilemap
-    m_map.draw(*m_r2d);
+    // 1) BG/Decor
+    m_tmj.drawBelowPlayer(*m_r2d);
+
+    // 2) Player
+    if (const SDL_Rect* fr = m_atlas.frame(m_anim.index())) {
+        SDL_RendererFlip flip = m_faceRight ? SDL_FLIP_NONE : SDL_FLIP_HORIZONTAL;
+        m_r2d->drawTextureRegion(m_atlas.texture(), *fr, m_player.x, m_player.y, 1.6f, 0.0f, flip);
+    }
+    else {
+        const int rectW = 24, rectH = 32;
+        SDL_FRect r{ (m_player.x - m_cam.x) * m_cam.zoom - rectW * 0.5f,
+                     (m_player.y - m_cam.y) * m_cam.zoom - rectH * 0.5f,
+                     (float)rectW, (float)rectH };
+        SDL_SetRenderDrawColor(m_renderer, 200, 200, 220, 255);
+        SDL_RenderFillRectF(m_renderer, &r);
+    }
+
+    // 3) FG katmanlar
+    m_tmj.drawAbovePlayer(*m_r2d);;
+
 
     //render() içinde platformu çiz (debug):
     for (auto& pl : m_platforms) {
@@ -246,22 +282,6 @@ void Application::render(){
             pl.w * m_cam.zoom, pl.h * m_cam.zoom
         };
         SDL_SetRenderDrawColor(m_renderer, 180, 140, 80, 255);
-        SDL_RenderFillRectF(m_renderer, &r);
-    }
-
-
-    // Draw player sprite (or fallback rect)
-    const SDL_Rect* fr = m_atlas.frame(m_anim.index());
-    if (fr) {
-        SDL_RendererFlip flip = m_faceRight ? SDL_FLIP_NONE : SDL_FLIP_HORIZONTAL;
-        m_r2d->drawTextureRegion(m_atlas.texture(), *fr, m_player.x, m_player.y, 1.6f, 0.0f, flip);
-    }
-    else {
-        const int rectW=24, rectH=32;
-        SDL_FRect r{ (m_player.x - m_cam.x)*m_cam.zoom - rectW*0.5f,
-                     (m_player.y - m_cam.y)*m_cam.zoom - rectH*0.5f,
-                     (float)rectW, (float)rectH };
-        SDL_SetRenderDrawColor(m_renderer, 200,200,220,255);
         SDL_RenderFillRectF(m_renderer, &r);
     }
 
