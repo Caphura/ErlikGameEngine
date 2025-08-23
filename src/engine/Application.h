@@ -8,6 +8,7 @@
 #include "Tilemap.h"
 #include "Physics.h"
 #include "TMJMap.h"
+#include "ResourceManager.h"
 
 struct SDL_Window;
 struct SDL_Renderer;
@@ -38,6 +39,10 @@ namespace Erlik {
         SDL_Renderer* m_renderer = nullptr;
         int m_width = 1280;
         int m_height = 720;
+
+        // Kaynak & hot reload
+        ResourceManager m_res;
+        std::string     m_tmjPath; // izlediðimiz tmj dosyasý
 
         //TMJMap
         TMJMap      m_tmj;        // çok katman çizim
