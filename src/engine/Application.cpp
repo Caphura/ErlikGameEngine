@@ -63,6 +63,11 @@ bool Application::init(){
         m_worldH = m_map.rows() * m_map.tileSize();
     }
 
+    // renderer kurulumundan sonra:
+    if (!m_text.init(m_renderer, m_fontPath, 14)) {
+        std::fprintf(stderr, "[dbg] TTF load failed (%s) -> overlay text disabled\n", m_fontPath);
+    }
+
 
 
 
@@ -136,8 +141,24 @@ void Application::processEvents(bool& running){
         m_res.check(true);
     }
 
-
-
+    // Overlay toggle
+    if (Input::keyPressed(SDL_SCANCODE_F1)) {
+        m_dbgOverlay = !m_dbgOverlay;
+        notifyHUD(m_dbgOverlay ? "Debug ON" : "Debug OFF", SDL_Color{ 70,130,200,255 }, 0.8f);
+    }
+    // Layer toggles
+    if (Input::keyPressed(SDL_SCANCODE_7)) {
+        m_dbgShowBG = !m_dbgShowBG;
+        notifyHUD(m_dbgShowBG ? "BG ON" : "BG OFF", SDL_Color{ 180,180,180,255 }, 0.8f);
+    }
+    if (Input::keyPressed(SDL_SCANCODE_8)) {
+        m_dbgShowFG = !m_dbgShowFG;
+        notifyHUD(m_dbgShowFG ? "FG ON" : "FG OFF", SDL_Color{ 180,180,180,255 }, 0.8f);
+    }
+    if (Input::keyPressed(SDL_SCANCODE_9)) {
+        m_dbgShowCol = !m_dbgShowCol;
+        notifyHUD(m_dbgShowCol ? "COL ON" : "COL OFF", SDL_Color{ 200,120,60,255 }, 0.8f);
+    }
 
 }
 
@@ -201,7 +222,9 @@ void Application::update(double dt) {
             }
         }
 
-        m_res.check(false); // pasif kontrol: dosya tarihi değişmişse reload eder
+        m_r2d->beginFrame();   // her frame başı
+        m_res.check(false);    // hot-reload dosya izleme (zaten eklemiştik)
+
 
         // --- Animation state ---
         float vx = m_player.vx, vy = m_player.vy;
@@ -281,10 +304,9 @@ void Application::render(){
     m_r2d->setCamera(m_cam);
     m_r2d->clear(12, 12, 16, 255);
 
-    // 1) BG/Decor
-    m_tmj.drawBelowPlayer(*m_r2d);
+    if (m_dbgShowBG) m_tmj.drawBelowPlayer(*m_r2d);
 
-    // 2) Player
+    // Player
     if (const SDL_Rect* fr = m_atlas.frame(m_anim.index())) {
         SDL_RendererFlip flip = m_faceRight ? SDL_FLIP_NONE : SDL_FLIP_HORIZONTAL;
         m_r2d->drawTextureRegion(m_atlas.texture(), *fr, m_player.x, m_player.y, 1.6f, 0.0f, flip);
@@ -299,7 +321,29 @@ void Application::render(){
     }
 
     // 3) FG katmanlar
-    m_tmj.drawAbovePlayer(*m_r2d);;
+    if (m_dbgShowFG) m_tmj.drawAbovePlayer(*m_r2d);
+
+    // Collision heatmap (debug)
+   // if (m_dbgCol && (m_dbgOverlay || m_dbgShowCol)) { /* varsa eski isim, aşağıdakiyle uyumlu yap */ }
+    if (m_dbgShowCol) {
+        int cols = m_map.cols(), rows = m_map.rows(), ts = m_map.tileSize();
+        for (int ty = 0; ty < rows; ++ty) {
+            for (int tx = 0; tx < cols; ++tx) {
+                int v = m_map.get(tx, ty); // <-- at() yerine get()
+                if (v < 0) continue;
+                SDL_Color c = (v == 0) ? SDL_Color{ 255,50,50,100 } : SDL_Color{ 255,220,40,90 };
+                SDL_SetRenderDrawBlendMode(m_renderer, SDL_BLENDMODE_BLEND);
+                SDL_SetRenderDrawColor(m_renderer, c.r, c.g, c.b, c.a);
+                SDL_FRect r{
+                    (tx * ts - m_cam.x) * m_cam.zoom,
+                    (ty * ts - m_cam.y) * m_cam.zoom,
+                    ts * m_cam.zoom, ts * m_cam.zoom
+                };
+                SDL_RenderFillRectF(m_renderer, &r);
+            }
+        }
+        SDL_SetRenderDrawBlendMode(m_renderer, SDL_BLENDMODE_NONE);
+    }
 
 
     //render() içinde platformu çiz (debug):

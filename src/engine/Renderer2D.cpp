@@ -7,15 +7,15 @@ void Renderer2D::clear(Uint8 r, Uint8 g, Uint8 b, Uint8 a){ SDL_SetRenderDrawCol
 void Renderer2D::present(){ SDL_RenderPresent(m_r); }
 void Renderer2D::outputSize(int& w, int& h) const { SDL_GetRendererOutputSize(m_r, &w, &h); }
 
-void Renderer2D::drawTexture(const Texture& tex,float cx,float cy,float scale,float rot){
-    if(!tex.sdl()) return;
-    int w=(int)(tex.width()*scale*m_cam.zoom), h=(int)(tex.height()*scale*m_cam.zoom);
-    SDL_FRect dst{ (cx-m_cam.x)*m_cam.zoom - w*0.5f, (cy-m_cam.y)*m_cam.zoom - h*0.5f, (float)w,(float)h };
-    SDL_FPoint center{ dst.w*0.5f, dst.h*0.5f };
-    SDL_RenderCopyExF(m_r, tex.sdl(), nullptr, &dst, rot, &center, SDL_FLIP_NONE);
+void Renderer2D::drawTexture(const Texture& tex, float cx, float cy, float scale, float rot) {
+    if (!tex.sdl()) return;
+    int w = (int)(tex.width() * scale * m_cam.zoom), h = (int)(tex.height() * scale * m_cam.zoom);
+    SDL_FRect dst{ (cx - m_cam.x) * m_cam.zoom - w * 0.5f, (cy - m_cam.y) * m_cam.zoom - h * 0.5f, (float)w,(float)h };
+    SDL_FPoint center{ dst.w * 0.5f, dst.h * 0.5f };
+    SDL_RenderCopyExF(m_r, tex.sdl(), /*src*/nullptr, &dst, rot, &center, SDL_FLIP_NONE);
+    m_drawCalls++; // sayaç
 }
 
-// src/engine/Renderer2D.cpp
 void Renderer2D::drawTextureRegion(const Texture& tex, const SDL_Rect& src,
     float cx, float cy, float scale, float rot, SDL_RendererFlip flip)
 {
@@ -24,7 +24,9 @@ void Renderer2D::drawTextureRegion(const Texture& tex, const SDL_Rect& src,
     SDL_FRect dst{ (cx - m_cam.x) * m_cam.zoom - w * 0.5f, (cy - m_cam.y) * m_cam.zoom - h * 0.5f, (float)w,(float)h };
     SDL_FPoint center{ dst.w * 0.5f, dst.h * 0.5f };
     SDL_RenderCopyExF(m_r, tex.sdl(), &src, &dst, rot, &center, flip);
+    m_drawCalls++; // sayaç
 }
+
 
 
 void Renderer2D::drawGrid(int spacing, Uint8 r, Uint8 g, Uint8 b, Uint8 a){
