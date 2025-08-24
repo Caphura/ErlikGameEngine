@@ -104,6 +104,11 @@ namespace Erlik {
         float m_deadW = 80.f;      // dead-zone yarý-geniþlik (px, world)
         float m_deadH = 60.f;      // dead-zone yarý-yükseklik (px, world)
 
+        // Camera shake
+        float m_shake = 0.0f;  // 0..1
+        float m_shakeDecay = 2.5f;  // s^-1
+        float m_shakeAmp = 2.0f;  // px @ zoom=1
+
     };
 
 } // namespace Erlik

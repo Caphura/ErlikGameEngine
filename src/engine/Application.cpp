@@ -283,6 +283,18 @@ void Application::update(double dt) {
             }
         }
 
+        // --- landing detection → shake boost
+        if (!m_wasGround && m_player.onGround) {
+            // İnişten önceki dikey hızı yaklaşıkla: (y - prevY) / dt
+            float vyApprox = (float)((m_player.y - m_player.prevY) / dt);
+            float speed = std::max(std::fabs(vyApprox), std::fabs(m_player.vy));
+            float impact = std::min(1.0f, speed / 300.0f);
+            m_shake = std::min(1.0f, m_shake + impact * 0.6f);
+        }
+        m_wasGround = m_player.onGround;
+
+
+
         m_r2d->beginFrame();   // her frame başı
         m_res.check(false);    // hot-reload dosya izleme (zaten eklemiştik)
 
@@ -340,6 +352,17 @@ void Application::update(double dt) {
         m_cam.y = std::clamp(m_cam.y, 0.f, maxY);
     }
 
+    // --- camera shake offset (top-left semantiği)
+    if (m_shake > 0.f) {
+        // basit rastgele jitter
+        float jx = ((float)std::rand() / RAND_MAX) * 2.f - 1.f;
+        float jy = ((float)std::rand() / RAND_MAX) * 2.f - 1.f;
+        m_cam.x += (jx * m_shakeAmp) / m_cam.zoom;
+        m_cam.y += (jy * m_shakeAmp) / m_cam.zoom;
+
+        // sönüm
+        m_shake = std::max(0.f, m_shake - m_shakeDecay * (float)dt);
+    }
 
 
 
