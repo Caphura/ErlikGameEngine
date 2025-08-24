@@ -105,12 +105,22 @@ bool Application::init(){
 
     // Visual sprite
     if (m_atlas.loadGrid(m_renderer, "assets/atlas8x1.png", 32, 32, 0, 0)) {
-        m_anim.set(m_atlas.frameCount(), 10.f, true);
-        std::fprintf(stderr, "[atlas] frames=%d\n", m_atlas.frameCount());
+        int total = m_atlas.frameCount();
+        m_anim.setTotalFrames(total);
+        std::fprintf(stderr, "[atlas] frames=%d\n", total);
+
+        // atlas8x1.png varsayımı: [0..3]=Idle, [4..7]=Run, [6]=Jump, [7]=Fall
+        m_anim.addClip("idle", 0, 4, 6.0f, true);
+        m_anim.addClip("run", 4, 4, 8.0f, true);
+        m_anim.addClip("jump", 6, 1, 12.0f, false); // one-shot
+        m_anim.addClip("fall", 7, 1, 8.0f, true);
+
+        m_anim.play("idle", true);
     }
     else {
         std::fprintf(stderr, "[warn] Atlas not found: assets/atlas8x1.png\n");
     }
+
 
     return true;
 }
@@ -266,21 +276,29 @@ void Application::update(double dt) {
         // atlas8x1.png: [0..3]=Idle, [4..7]=Run varsayıyoruz
         switch (m_state) {
         case AnimState::Idle:
-            m_anim.setRange(0, 4, 6.0f, true);
+            m_anim.play("idle");
+            m_anim.setFPS(6.0f);
             break;
+
         case AnimState::Run: {
+            m_anim.play("run");
             // hızla senkron fps (4..16 arası)
             float k = std::clamp(std::fabs(vx) / m_pp.moveSpeed, 0.f, 1.f);
-            m_anim.setRange(4, 4, 4.0f + 12.0f * k, true);
+            m_anim.setFPS(4.0f + 12.0f * k);
             break;
         }
+
         case AnimState::Jump:
-            m_anim.setRange(0, 1, 1.0f, false); // tek kare
+            // one-shot başlangıcı hissettirmek için forceRestart = true
+            m_anim.play("jump", true);
             break;
+
         case AnimState::Fall:
-            m_anim.setRange(1, 1, 1.0f, false);
+            m_anim.play("fall");
             break;
         }
+
+
         m_anim.update(dt);
     }
 
