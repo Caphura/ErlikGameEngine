@@ -27,6 +27,21 @@ void Renderer2D::drawTextureRegion(const Texture& tex, const SDL_Rect& src,
     m_drawCalls++; // sayaç
 }
 
+void Renderer2D::fillRect(float x, float y, float w, float h, SDL_Color color)
+{
+    SDL_SetRenderDrawBlendMode(m_r, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(m_r, color.r, color.g, color.b, color.a);
+
+    SDL_FRect r{
+        (x - m_cam.x) * m_cam.zoom,
+        (y - m_cam.y) * m_cam.zoom,
+        w * m_cam.zoom,
+        h * m_cam.zoom
+    };
+    SDL_RenderFillRectF(m_r, &r);
+
+    SDL_SetRenderDrawBlendMode(m_r, SDL_BLENDMODE_NONE);
+}
 
 
 void Renderer2D::drawGrid(int spacing, Uint8 r, Uint8 g, Uint8 b, Uint8 a){

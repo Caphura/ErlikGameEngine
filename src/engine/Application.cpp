@@ -283,14 +283,25 @@ void Application::update(double dt) {
             }
         }
 
-        // --- landing detection → shake boost
+        // landing detection → shake + DUST
         if (!m_wasGround && m_player.onGround) {
-            // İnişten önceki dikey hızı yaklaşıkla: (y - prevY) / dt
+            // Yaklaşık iniş hızı
             float vyApprox = (float)((m_player.y - m_player.prevY) / dt);
             float speed = std::max(std::fabs(vyApprox), std::fabs(m_player.vy));
             float impact = std::min(1.0f, speed / 300.0f);
-            m_shake = std::min(1.0f, m_shake + impact * 0.6f);
+
+            // oyuncunun ayak hizası
+            float fx = m_player.x;
+            float fy = m_player.y + m_player.halfH - 2.f;
+
+            int   count = 8 + int(10 * impact);
+            float dir = m_faceRight ? 1.f : -1.f;
+            float baseV = 100.f + 180.f * impact;
+
+            m_fx.emitDust(fx, fy, count, dir, baseV);
         }
+        m_fx.update((float)dt);
+
         m_wasGround = m_player.onGround;
 
 
@@ -391,6 +402,7 @@ void Application::render(){
         SDL_SetRenderDrawColor(m_renderer, 200, 200, 220, 255);
         SDL_RenderFillRectF(m_renderer, &r);
     }
+    m_fx.draw(*m_r2d);
 
     // 3) FG katmanlar
     if (m_dbgShowFG) m_tmj.drawAbovePlayer(*m_r2d);

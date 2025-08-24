@@ -12,7 +12,7 @@ public:
     void clear(Uint8 r, Uint8 g, Uint8 b, Uint8 a=255);
     void present();
     void outputSize(int& w, int& h) const;
-
+    void fillRect(float x, float y, float w, float h, SDL_Color color);
     void drawTexture(const Texture&, float cx,float cy,float scale=1.f,float rotationDeg=0.f);
     void beginFrame() { m_drawCalls = 0; }
     int  drawCalls() const { return m_drawCalls; }

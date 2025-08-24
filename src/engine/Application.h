@@ -12,6 +12,8 @@
 #include <SDL.h>   // SDL_Color için
 #include "TextRenderer.h"
 #include "AnimatorController.h"
+#include "Particles.h"
+
 
 
 struct SDL_Window;
@@ -80,6 +82,8 @@ namespace Erlik {
         float m_worldW = 0.f;
         float m_worldH = 0.f;
 
+        //Particles
+        Erlik::ParticleSystem m_fx;
 
         // Visuals
         SpriteAtlas m_atlas;
