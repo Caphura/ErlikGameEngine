@@ -22,6 +22,9 @@ struct PhysicsParams {
     float maxFall = 900.f;
     float jumpVel = -900.f;
     float dropThroughTime = 0.18f; // Down+Jump ile aşağı sarkınca ne kadar süre one-way yok sayılacak
+    float lowJumpMul = 2.0f; // Space bırakılmışsa (yukarı çıkarken) ekstra yerçekimi katsayısı
+    float fallGravityMul = 1.3f; // Aşağı düşerken daha ağır his
+
 
     // Önceden eklediklerimiz:
     float coyoteTime = 0.10f;

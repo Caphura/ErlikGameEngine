@@ -201,8 +201,9 @@ namespace Erlik {
 
             // Parallax için katmana özel kamera
             Camera2D cam = base;
-            cam.x = base.x * L.parallaxX - L.offsetX;
-            cam.y = base.y * L.parallaxY - L.offsetY;
+            cam.x = base.x * L.parallaxX;
+            cam.y = base.y * L.parallaxY;
+
             r2d.setCamera(cam);
 
             // Culling
@@ -274,8 +275,9 @@ namespace Erlik {
             if (L.propFG) continue;
 
             Camera2D cam = base;
-            cam.x = base.x * L.parallaxX - L.offsetX;
-            cam.y = base.y * L.parallaxY - L.offsetY;
+            cam.x = base.x * L.parallaxX;
+            cam.y = base.y * L.parallaxY;
+
             r2d.setCamera(cam);
 
             float left = cam.x, top = cam.y;
@@ -338,8 +340,9 @@ namespace Erlik {
             if (!L.propFG) continue;
 
             Camera2D cam = base;
-            cam.x = base.x * L.parallaxX - L.offsetX;
-            cam.y = base.y * L.parallaxY - L.offsetY;
+            cam.x = base.x * L.parallaxX;
+            cam.y = base.y * L.parallaxY;
+
             r2d.setCamera(cam);
 
             float left = cam.x, top = cam.y;

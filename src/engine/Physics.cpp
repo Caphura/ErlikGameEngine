@@ -80,10 +80,21 @@ namespace Erlik {
             p.coyoteTimer = 0.f;
         }
 
-        // --- Yerçekimi + jump-cut ---
-        p.vy += pp.gravity * dt;
-        if (p.vy > pp.maxFall) p.vy = pp.maxFall;
-        if (p.vy < 0.f && !jumpHeld) p.vy *= pp.jumpCutFactor;
+        // --- Gravity with feel (tek yerde) ---
+        {
+            float g = pp.gravity;
+            if (p.vy > 0.f) {
+                // düşüşte daha ağır
+                g *= pp.fallGravityMul;
+            }
+            else if (!jumpHeld) {
+                // Space'i bırakmışsan: yukarı çıkarken kısa zıpla
+                g *= pp.lowJumpMul;
+            }
+            p.vy += g * dt;
+            if (p.vy > pp.maxFall) p.vy = pp.maxFall;
+        }
+
 
 
         // -------- STEP X --------
@@ -145,6 +156,7 @@ namespace Erlik {
             float right = p.x + p.halfW - 1.0f; // inset
             float top = p.y - p.halfH;
             float bottom = p.y + p.halfH;
+            
 
             int tx0 = tileFloor(left, tile);
             int tx1 = tileFloor(right, tile);

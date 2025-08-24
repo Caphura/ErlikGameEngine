@@ -76,6 +76,11 @@ namespace Erlik {
         Player        m_player;
         PhysicsParams m_pp;
 
+        // World size (pixel) — TMJ/CSV yüklenince set edilir
+        float m_worldW = 0.f;
+        float m_worldH = 0.f;
+
+
         // Visuals
         SpriteAtlas m_atlas;
         Animator    m_anim;
@@ -95,8 +100,10 @@ namespace Erlik {
         std::vector<Platform> m_platforms;
 
         //Cam Lerp
-        float m_camLerp = 8.0f;   // ne kadar hýzlý takip etsin (8–12 iyi)
-        int   m_worldW = 0, m_worldH = 0; // tilemap’ten hesaplayacaðýz
+        float m_camLerp = 0.15f;     // 0..1  (takip hýz)
+        float m_deadW = 80.f;      // dead-zone yarý-geniþlik (px, world)
+        float m_deadH = 60.f;      // dead-zone yarý-yükseklik (px, world)
+
     };
 
 } // namespace Erlik

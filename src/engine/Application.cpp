@@ -34,16 +34,16 @@ bool Application::init(){
     if (m_tmj.load(m_renderer, m_tmjPath)) {
         std::fprintf(stderr, "[info] TMJ loaded: %s\n", m_tmjPath.c_str());
         m_tmj.buildCollision(m_map, "collision", "oneway");
-        m_worldW = m_tmj.cols() * m_tmj.tileW();
-        m_worldH = m_tmj.rows() * m_tmj.tileH();
+        m_worldW = static_cast<float>(m_tmj.cols() * m_tmj.tileW());
+        m_worldH = static_cast<float>(m_tmj.rows() * m_tmj.tileH());
 
         // --- Hot Reload: TMJ dosyasını izle
         m_res.track(m_tmjPath, [this]() {
             if (m_tmj.load(m_renderer, m_tmjPath)) {
                 std::fprintf(stderr, "[hotreload] TMJ reloaded: %s\n", m_tmjPath.c_str());
                 m_tmj.buildCollision(m_map, "collision", "oneway");
-                m_worldW = m_tmj.cols() * m_tmj.tileW();
-                m_worldH = m_tmj.rows() * m_tmj.tileH();
+                m_worldW = static_cast<float>(m_tmj.cols() * m_tmj.tileW());
+                m_worldH = static_cast<float>(m_tmj.rows() * m_tmj.tileH());
 
                 notifyHUD("Reload OK (TMJ)", SDL_Color{ 40,200, 90,255 }, 1.5f);
             }
@@ -59,8 +59,8 @@ bool Application::init(){
         std::fprintf(stderr, "[warn] TMJ load FAILED, fallback CSV\n");
         m_map.loadCSV("assets/level_aabb.csv");
         m_map.loadTileset(m_renderer, "assets/tileset32.png", 32);
-        m_worldW = m_map.cols() * m_map.tileSize();
-        m_worldH = m_map.rows() * m_map.tileSize();
+        m_worldW = static_cast<float>(m_map.cols() * m_map.tileSize());
+        m_worldH = static_cast<float>(m_map.rows() * m_map.tileSize());
     }
 
     // renderer kurulumundan sonra:
@@ -221,7 +221,8 @@ void Application::update(double dt) {
 
         // Aşağı + zıplama: S veya ↓ basılıyken zıplama tuşu basıldıysa drop-through iste
         bool downHeld = Input::keyDown(SDL_SCANCODE_S) || Input::keyDown(SDL_SCANCODE_DOWN);
-        bool dropRequest = downHeld && (jumpPressed || jumpHeld);
+        bool dropRequest = downHeld && jumpPressed;
+
 
 
         // Fizik çağrısı (YENİ imza!)
@@ -297,34 +298,50 @@ void Application::update(double dt) {
 
 
     // Kamera
-    // Kamera takibi (lerp + clamp)
+    // --- Camera follow (camera is TOP-LEFT in Renderer2D) ---
     int vw, vh; m_r2d->outputSize(vw, vh);
-    if (m_follow) {
-        const float targetX = m_player.x - (vw * 0.5f) / m_cam.zoom;
-        const float targetY = m_player.y - (vh * 0.5f) / m_cam.zoom;
+    float viewW = vw / m_cam.zoom;
+    float viewH = vh / m_cam.zoom;
 
-        // Exponential-like lerp
-        const float t = std::clamp(m_camLerp * (float)dt, 0.0f, 1.0f);
-        m_cam.x += (targetX - m_cam.x) * t;
-        m_cam.y += (targetY - m_cam.y) * t;
+    // mevcut kameranın MERKEZİ
+    float cx = m_cam.x + viewW * 0.5f;
+    float cy = m_cam.y + viewH * 0.5f;
 
-        // Dünya sınırı (viewport’u dışarı taşırma)
-        const float maxX = std::max(0.0f, (float)m_worldW - vw / m_cam.zoom);
-        const float maxY = std::max(0.0f, (float)m_worldH - vh / m_cam.zoom);
-        m_cam.x = std::clamp(m_cam.x, 0.0f, maxX);
-        m_cam.y = std::clamp(m_cam.y, 0.0f, maxY);
+    // hedef (oyuncu merkezi)
+    float tx = m_player.x;
+    float ty = m_player.y;
 
-        // (isteğe bağlı) piksel snap: titremeyi azaltır
-        m_cam.x = std::floor(m_cam.x);
-        m_cam.y = std::floor(m_cam.y);
+    // dead-zone (zoom’a göre ölçekli)
+    float hw = m_deadW / m_cam.zoom;
+    float hh = m_deadH / m_cam.zoom;
+
+    // dead-zone dışına çıktıysa merkez hedefini kaydır
+    float dx = tx - cx;
+    float dy = ty - cy;
+    if (dx > hw) cx += (dx - hw);
+    if (dx < -hw) cx += (dx + hw);
+    if (dy > hh) cy += (dy - hh);
+    if (dy < -hh) cy += (dy + hh);
+
+    // yumuşak takip (dt’ye duyarlı)
+    float lerp = 1.f - std::pow(1.f - m_camLerp, (float)(dt * 60.0));
+    float newCx = m_cam.x + viewW * 0.5f + (cx - (m_cam.x + viewW * 0.5f)) * lerp;
+    float newCy = m_cam.y + viewH * 0.5f + (cy - (m_cam.y + viewH * 0.5f)) * lerp;
+
+    // MERKEZDEN tekrar TOP-LEFT'e çevir
+    m_cam.x = newCx - viewW * 0.5f;
+    m_cam.y = newCy - viewH * 0.5f;
+
+    // (opsiyonel) dünyaya clamp
+    if (m_worldW > 0 && m_worldH > 0) {
+        float maxX = std::max(0.f, m_worldW - viewW);
+        float maxY = std::max(0.f, m_worldH - viewH);
+        m_cam.x = std::clamp(m_cam.x, 0.f, maxX);
+        m_cam.y = std::clamp(m_cam.y, 0.f, maxY);
     }
-    else {
-        // Fix modunda da clamp uygula
-        const float maxX = std::max(0.0f, (float)m_worldW - vw / m_cam.zoom);
-        const float maxY = std::max(0.0f, (float)m_worldH - vh / m_cam.zoom);
-        m_cam.x = std::clamp(m_cam.x, 0.0f, maxX);
-        m_cam.y = std::clamp(m_cam.y, 0.0f, maxY);
-    }
+
+
+
 
 
     m_time += dt;
