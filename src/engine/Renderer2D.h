@@ -14,6 +14,9 @@ public:
     void outputSize(int& w, int& h) const;
 
     void drawTexture(const Texture&, float cx,float cy,float scale=1.f,float rotationDeg=0.f);
+    void beginFrame() { m_drawCalls = 0; }
+    int  drawCalls() const { return m_drawCalls; }
+
     // imza SONUNA varsayýlan flip eklendi
     void drawTextureRegion(const Texture&, const SDL_Rect& src,
         float cx, float cy, float scale = 1.f, float rotationDeg = 0.f,
@@ -27,6 +30,7 @@ public:
 private:
     SDL_Renderer* m_r = nullptr;
     Camera2D m_cam;
+    int  m_drawCalls = 0;
 };
 
 } // namespace Erlik

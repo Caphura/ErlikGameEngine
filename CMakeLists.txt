@@ -45,4 +45,5 @@ target_sources(erlik PRIVATE
     src/engine/TMJMap.cpp
     src/engine/TMJMap.h
     src/engine/TextRenderer.h
+    src/engine/AnimatorController.cpp
 )

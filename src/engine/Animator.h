@@ -1,40 +1,45 @@
-// src/engine/Animator.h
 #pragma once
-#include <algorithm>
+#include <string>
+#include <unordered_map>
 
 namespace Erlik {
+
     class Animator {
     public:
-        // Yeni API: belirli aralýðý oynat
-        void setRange(int start, int count, float fps, bool loop = true) {
-            m_start = std::max(0, start);
-            m_count = std::max(1, count);
-            m_fps = fps > 0 ? fps : 1.f;
-            m_loop = loop;
-            m_time = 0.f; m_index = 0;
-        }
+        struct Clip {
+            int   start = 0;
+            int   count = 1;
+            float fps = 8.f;
+            bool  loop = true;
+        };
 
-        // Eski API ile uyumluluk (Application.cpp init'te kullanýlýyor)
-        void set(int count, float fps, bool loop = true) {
-            setRange(0, count, fps, loop);
-        }
+        // Klip yönetimi
+        void addClip(const std::string& name, int start, int count, float fps, bool loop);
+        bool play(const std::string& name, bool forceRestart = false);
+        const std::string& currentClip() const { return m_clipName; }
 
-        void update(double dt) {
-            m_time += (float)dt; const float frameDur = 1.0f / m_fps;
-            while (m_time >= frameDur) {
-                m_time -= frameDur; m_index++;
-                if (m_index >= m_count) { if (m_loop) m_index = 0; else { m_index = m_count - 1; break; } }
-            }
-        }
-
-        int   index() const { return m_start + m_index; }
-        void  setFPS(float f) { if (f > 0) m_fps = f; }
-        float fps() const { return m_fps; }
+        // Zaman/çerçeve
+        void  update(double dt);
+        int   index() const;
+        float fps() const;
+        void  setFPS(float f);
+        void  setTotalFrames(int n) { m_totalFrames = n; }
 
     private:
-        int   m_start = 0, m_count = 1, m_index = 0;
-        float m_fps = 8.f;
-        bool  m_loop = true;
-        float m_time = 0.f;
+        // Çalýþma durumu
+        int    m_index = 0;     // mutlak frame index (atlas karesine direkt gider)
+        double m_time = 0.0;
+        float  m_fps = 8.f;
+
+        // Aktif klip bilgisi
+        std::unordered_map<std::string, Clip> m_clips;
+        std::string m_clipName;
+        int   m_clipStart = 0;
+        int   m_clipCount = 1;
+        bool  m_clipLoop = true;
+
+        // Opsiyonel toplam frame sayýsý (clamp için)
+        int   m_totalFrames = 0;
     };
+
 } // namespace Erlik
