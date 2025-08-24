@@ -1,43 +1,68 @@
 #pragma once
-#include "Tilemap.h"
+#include <cstdint>
 
 namespace Erlik {
 
-struct Player {
-    float x=0.f, y=0.f;
-    float vx=0.f, vy=0.f;
-    bool onGround=false;
-    float halfW=12.f, halfH=16.f; // 24x32 kapsayan kutu
-    float prevX = 0.f, prevY = 0.f;
-    float dropTimer = 0.f;        // one-way'i geçici olarak yok saymak için
-    float coyoteTimer = 0.f, jumpBufferTimer = 0.f;
+    class Tilemap;
 
-};
 
-struct PhysicsParams {
-    float gravity = 1800.f;
-    float moveSpeed = 260.f;
-    float airControl = 0.6f;
-    float accel = 12.f;
-    float maxFall = 900.f;
-    float jumpVel = -900.f;
-    float dropThroughTime = 0.18f; // Down+Jump ile aşağı sarkınca ne kadar süre one-way yok sayılacak
+    // Oyuncu (fizik çekirdeği bu alanları kullanıyor)
+    struct Player {
+        // Konum & hız
+        float x = 0.f, y = 0.f;
+        float vx = 0.f, vy = 0.f;
 
-    // Önceden eklediklerimiz:
-    float coyoteTime = 0.10f;
-    float jumpBufferTime = 0.12f;
-    float groundSnapDist = 3.0f;
-    int   stepMaxPixels = 8;
+        // Önceki frame konumu (çarpışma ve oneway kontrolü için)
+        float prevX = 0.f, prevY = 0.f;
 
-    // YENİ: sürtünme ve kısa zıplama
-    float frictionGround = 20.f; // px/s sürtünme katsayısı
-    float frictionAir = 1.f; // havada hafif sönüm
-    float jumpCutFactor = 0.5f; // tuş bırakılınca yukarı hızla çarp (0.5 = %50)
-};
+        // Boyut (yarım genişlik / yarım yükseklik)
+        float halfW = 12.f;   // 24 px genişlik
+        float halfH = 16.f;   // 32 px yükseklik
 
-// İMZA: jumpPressed + jumpHeld ++ dropRequest
-void integrate(Player& p, const Tilemap& map, const PhysicsParams& pp, float dt,
-    bool moveLeft, bool moveRight, bool jumpPressed, bool jumpHeld, bool dropRequest);
+        bool  onGround = false;
 
+        // Zamanlayıcılar
+        float dropTimer = 0.f;   // one-way'den aşağı bırakma süresi
+        float coyoteTimer = 0.f;   // coyote time (yer toleransı)
+        float jumpBufferTimer = 0.f;   // jump buffer (erken basma toleransı)
+    };
+
+    // Fizik parametreleri (ayarlar)
+    struct PhysicsParams {
+        // Yatay hareket
+        float moveSpeed = 120.f;  // px/s
+        float accel = 10.f;   // ivmelenme karışım katsayısı (büyüdükçe daha hızlı oturur)
+        float frictionGround = 8.f;    // yerde sürtünme
+        float frictionAir = 1.5f;   // havada sürtünme
+        float airControl = 0.5f;   // havada accel çarpanı (0..1)
+
+        // Zıplama & yerçekimi
+        float jumpVel = -660.f; // NEGATİF = yukarı itiş
+        float gravity = 850.f;  // +aşağı
+        float maxFall = 420.f;  // terminal düşüş hızı
+        float jumpCutFactor = 0.5f;   // Space erken bırakılırsa yukarı hızın çarpanı
+
+        // Küçük basamaklara “tırmanma” ve yere yapışma
+        int   stepMaxPixels = 4;      // en çok şu kadar piksel yukarı tırman
+        float groundSnapDist = 4.f;    // yere yakınsa çektir
+
+        // One-way platformdan aşağı bırakma (S+Space)
+        float dropThroughTime = 0.18f;
+
+        // Oyun hissi 2.0
+        float coyoteTime = 0.12f;  // 120 ms
+        float jumpBufferTime = 0.12f;  // 120 ms
+    };
+
+    // Physics.cpp’deki imza ile birebir aynı olmalı
+    void integrate(
+        Player& p,
+        const class Tilemap& map,
+        const PhysicsParams& pp,
+        float dt,
+        bool moveLeft, bool moveRight,
+        bool jumpPressed, bool jumpHeld,
+        bool dropRequest
+    );
 
 } // namespace Erlik
