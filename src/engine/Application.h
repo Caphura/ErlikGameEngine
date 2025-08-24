@@ -11,6 +11,7 @@
 #include "ResourceManager.h"
 #include <SDL.h>   // SDL_Color için
 #include "TextRenderer.h"
+#include "AnimatorController.h"
 
 
 struct SDL_Window;
@@ -23,8 +24,6 @@ namespace Erlik {
         float vx = 0.f, vy = 0.f;
         float minX = 0.f, maxX = 0.f; // yatay salýným sýnýrlarý
     };
-
-    enum class AnimState { Idle, Run, Jump, Fall };
 
     class Application {
     public:
@@ -82,8 +81,10 @@ namespace Erlik {
         Animator    m_anim;
 
         // Anim state (YALNIZCA ÜYE OLARAK!)
-        AnimState m_state = AnimState::Idle;
-        bool      m_faceRight = true;
+        Erlik::AnimatorController m_animc;
+        bool  m_faceRight = true;   // sprite saða bakýyor mu?
+        bool  m_jumpTrigger = false;   // bu framede Space tetiklendiyse
+        bool  m_wasGround = false;   // (opsiyonel) landing tespiti için
 
         // State
         bool  m_paused = false;

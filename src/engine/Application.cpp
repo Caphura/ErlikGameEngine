@@ -110,12 +110,17 @@ bool Application::init(){
         std::fprintf(stderr, "[atlas] frames=%d\n", total);
 
         // atlas8x1.png varsayımı: [0..3]=Idle, [4..7]=Run, [6]=Jump, [7]=Fall
-        m_anim.addClip("idle", 0, 4, 6.0f, true);
-        m_anim.addClip("run", 4, 4, 8.0f, true);
-        m_anim.addClip("jump", 6, 1, 12.0f, false); // one-shot
+        // Kendi atlasına göre start/count ayarla
+        m_anim.addClip("idle", 0, 2, 6.0f, true);
+        m_anim.addClip("run", 2, 4, 8.0f, true);
+        m_anim.addClip("jump", 6, 1, 12.0f, false);
         m_anim.addClip("fall", 7, 1, 8.0f, true);
+        m_anim.addClip("land", 6, 1, 10.0f, false);
 
         m_anim.play("idle", true);
+
+        m_animc.bind(&m_anim);
+        m_animc.setClipNames("idle", "run", "jump", "fall", "land");
     }
     else {
         std::fprintf(stderr, "[warn] Atlas not found: assets/atlas8x1.png\n");
@@ -176,6 +181,11 @@ void Application::processEvents(bool& running) {
             SDL_Color{ 70,130,200,255 }, 0.8f);
     }
 
+    // Space “bu framede basıldı” + yerde + S ile aşağı basmıyorken
+    if (Input::keyPressed(SDL_SCANCODE_SPACE) && m_player.onGround && !Input::keyDown(SDL_SCANCODE_S)) {
+        m_jumpTrigger = true;
+    }
+
     // Layer toggles (BUNLAR FONKSİYON İÇİNDE KALMALI)
     if (Input::keyPressed(SDL_SCANCODE_7)) {
         m_dbgShowBG = !m_dbgShowBG;
@@ -217,6 +227,26 @@ void Application::update(double dt) {
         // Fizik çağrısı (YENİ imza!)
         integrate(m_player, m_map, m_pp, (float)dt, left, right, jumpPressed, jumpHeld, dropRequest);
 
+        // ① Yüz yönünü güncelle (anim flip için)
+        if (std::fabs(m_player.vx) > 1.f) {
+            m_faceRight = (m_player.vx >= 0.f);
+        }
+
+        // ② Animator Controller parametreleri
+        Erlik::AnimParams ap;
+        ap.onGround = m_player.onGround;
+        ap.vx = m_player.vx;
+        ap.vy = m_player.vy;
+        ap.jumpTrigger = m_jumpTrigger;   // processEvents() içinde Space tetiklersin
+
+        // ③ Controller + Animator update
+        m_animc.update(dt, ap);
+        m_anim.update(dt);
+
+        // ④ Jump tetik bir-frame’liktir
+        m_jumpTrigger = false;
+
+
         //UPDATE içinde süreyi azalt
         if (m_hudTimer > 0.f) {
             m_hudTimer = std::max(0.f, m_hudTimer - (float)dt);
@@ -255,51 +285,6 @@ void Application::update(double dt) {
         m_r2d->beginFrame();   // her frame başı
         m_res.check(false);    // hot-reload dosya izleme (zaten eklemiştik)
 
-
-        // --- Animation state ---
-        float vx = m_player.vx, vy = m_player.vy;
-        bool onGround = m_player.onGround;
-
-        // Yönü güncelle (ölü bölge ile)
-        if (vx > 20.f) m_faceRight = true;
-        if (vx < -20.f) m_faceRight = false;
-
-        // State kararı
-        if (!onGround) {
-            m_state = (vy < -30.f) ? AnimState::Jump : AnimState::Fall;
-        }
-        else {
-            m_state = (std::fabs(vx) > 25.f) ? AnimState::Run : AnimState::Idle;
-        }
-
-        // State → anim aralığı ve hız
-        // atlas8x1.png: [0..3]=Idle, [4..7]=Run varsayıyoruz
-        switch (m_state) {
-        case AnimState::Idle:
-            m_anim.play("idle");
-            m_anim.setFPS(6.0f);
-            break;
-
-        case AnimState::Run: {
-            m_anim.play("run");
-            // hızla senkron fps (4..16 arası)
-            float k = std::clamp(std::fabs(vx) / m_pp.moveSpeed, 0.f, 1.f);
-            m_anim.setFPS(4.0f + 12.0f * k);
-            break;
-        }
-
-        case AnimState::Jump:
-            // one-shot başlangıcı hissettirmek için forceRestart = true
-            m_anim.play("jump", true);
-            break;
-
-        case AnimState::Fall:
-            m_anim.play("fall");
-            break;
-        }
-
-
-        m_anim.update(dt);
     }
 
     // FPS hesapla (dt>0 ise). Exponential smoothing: new = (1/dt)*a + old*(1-a)
@@ -388,6 +373,9 @@ void Application::render(){
 
             std::snprintf(line, sizeof(line), "DrawCalls: %d", m_r2d->drawCalls());
             m_text.draw(line, (int)bg.x + 12, (int)bg.y + 30, SDL_Color{ 220,220,220,255 });
+
+            std::snprintf(line, sizeof(line), "Anim: %s", m_animc.stateName());
+            m_text.draw(line, (int)bg.x + 120, (int)bg.y + 30, SDL_Color{ 180,220,180,255 });
 
             std::snprintf(line, sizeof(line), "BG[7]: %s", m_dbgShowBG ? "ON" : "OFF");
             m_text.draw(line, (int)bg.x + 12, (int)bg.y + 52, SDL_Color{ 180,180,180,255 });
