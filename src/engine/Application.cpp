@@ -358,42 +358,72 @@ void Application::render(){
     // Collision heatmap (debug)
    // if (m_dbgCol && (m_dbgOverlay || m_dbgShowCol)) { /* varsa eski isim, aşağıdakiyle uyumlu yap */ }
     if (m_dbgOverlay) {
-        // Panel arka plan (görsel kanıt)
         int vw, vh; m_r2d->outputSize(vw, vh);
+
+        // --------- Panel boyutu / konum ----------
+        const int pad = 12;         // iç boşluk
+        const int lh = 18;         // satır yüksekliği
+        const int colW = 160;        // her sütunun genişliği
+        const int cols = 2;
+        const int rows = 5;          // kaç satır yazacağız
+        const int panelW = pad * (cols + 1) + colW * cols;   // 12*3 + 160*2 = 336
+        const int panelH = pad * 2 + lh * rows;              // 12*2 + 18*5 = 126
+
         SDL_SetRenderDrawBlendMode(m_renderer, SDL_BLENDMODE_BLEND);
-        SDL_SetRenderDrawColor(m_renderer, 0, 0, 0, 140);
-        SDL_FRect bg{ (float)vw - 240.f, 10.f, 230.f, 96.f };
+        SDL_SetRenderDrawColor(m_renderer, 0, 0, 0, 160);
+        SDL_FRect bg{ (float)(vw - panelW - 10), 10.f, (float)panelW, (float)panelH };
         SDL_RenderFillRectF(m_renderer, &bg);
         SDL_SetRenderDrawBlendMode(m_renderer, SDL_BLENDMODE_NONE);
 
         if (m_text.ready()) {
+            SDL_Color w{ 220,220,220,255 };
+            SDL_Color g{ 180,220,180,255 };
+            SDL_Color y{ 200,200,120,255 };
+
+            auto Lx = (int)bg.x + pad;           // sol sütun x
+            auto Rx = Lx + colW + pad;           // sağ sütun x
+            int  y0 = (int)bg.y + pad;
             char line[128];
+
+            // satır 0
             std::snprintf(line, sizeof(line), "FPS: %.1f", m_currentFPS);
-            m_text.draw(line, (int)bg.x + 12, (int)bg.y + 10, SDL_Color{ 220,220,220,255 });
-
-            std::snprintf(line, sizeof(line), "DrawCalls: %d", m_r2d->drawCalls());
-            m_text.draw(line, (int)bg.x + 12, (int)bg.y + 30, SDL_Color{ 220,220,220,255 });
-
+            m_text.draw(line, Lx, y0, w);
             std::snprintf(line, sizeof(line), "Anim: %s", m_animc.stateName());
-            m_text.draw(line, (int)bg.x + 120, (int)bg.y + 30, SDL_Color{ 180,220,180,255 });
+            m_text.draw(line, Rx, y0, g);
 
+            // satır 1
+            y0 += lh;
+            std::snprintf(line, sizeof(line), "DrawCalls: %d", m_r2d->drawCalls());
+            m_text.draw(line, Lx, y0, w);
+
+            // satır 2
+            y0 += lh;
+            std::snprintf(line, sizeof(line), "Coyote: %.0f ms", m_player.coyoteTimer * 1000.f);
+            m_text.draw(line, Lx, y0, y);
             std::snprintf(line, sizeof(line), "BG[7]: %s", m_dbgShowBG ? "ON" : "OFF");
-            m_text.draw(line, (int)bg.x + 12, (int)bg.y + 52, SDL_Color{ 180,180,180,255 });
+            m_text.draw(line, Rx, y0, w);
 
+            // satır 3
+            y0 += lh;
+            std::snprintf(line, sizeof(line), "Buffer: %.0f ms", m_player.jumpBufferTimer * 1000.f);
+            m_text.draw(line, Lx, y0, y);
             std::snprintf(line, sizeof(line), "FG[8]: %s", m_dbgShowFG ? "ON" : "OFF");
-            m_text.draw(line, (int)bg.x + 120, (int)bg.y + 52, SDL_Color{ 180,180,180,255 });
+            m_text.draw(line, Rx, y0, w);
 
+            // satır 4
+            y0 += lh;
             std::snprintf(line, sizeof(line), "COL[9]: %s", m_dbgShowCol ? "ON" : "OFF");
-            m_text.draw(line, (int)bg.x + 12, (int)bg.y + 74, SDL_Color{ 200,180,120,255 });
+            m_text.draw(line, Rx, y0, w);
         }
         else {
-            // Font yoksa, pencere başlığına kısa özet yaz (fallback)
+            // font yoksa yine de başlığa kısa özet yaz
             char title[128];
             std::snprintf(title, sizeof(title), "FPS %.1f | DC %d | Overlay (no font)",
                 m_currentFPS, m_r2d->drawCalls());
             SDL_SetWindowTitle(m_window, title);
         }
     }
+
 
 
 
