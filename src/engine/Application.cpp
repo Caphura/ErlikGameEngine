@@ -283,6 +283,45 @@ void Application::update(double dt) {
             }
         }
 
+        // --- RUN FOOT DUST (yer + yeterli hız) ---
+        if (m_player.onGround) {
+            float speed = std::fabs(m_player.vx);
+            if (speed > m_runDustMinSpd) {
+                // hız faktörü: 0..1 (movespeed'e oranla)
+                float k = std::clamp(speed / m_pp.moveSpeed, 0.0f, 1.0f);
+
+                // hızlandıkça daha sık puf: 0.18s..0.06s aralığı
+                m_runDustTimer -= (float)dt;
+                if (m_runDustTimer <= 0.0f) {
+                    m_runDustTimer = 0.18f - 0.12f * k;
+
+                    // ayak hizası
+                    float fx = m_player.x + (m_faceRight ? +m_player.halfW * 0.55f
+                        : -m_player.halfW * 0.55f);
+                    float fy = m_player.y + m_player.halfH - 2.0f;
+
+                    // yön (karakterin baktığı tarafa doğru) ve temel hız
+                    float dir = m_faceRight ? 1.0f : -1.0f;
+                    float baseV = 80.0f + 120.0f * k;
+
+                    // ana puf
+                    m_fx.emitDust(fx, fy, 2 + int(2 * k), dir, baseV);
+
+                    // hafif karşı tarafa da minik puf (daha doğal görünür)
+                    m_fx.emitDust(fx, fy, 1, -dir, baseV * 0.5f);
+                }
+            }
+            else {
+                // yavaşken zamanlayıcıyı sıfırla
+                m_runDustTimer = 0.0f;
+            }
+        }
+        else {
+            // havada: zamanlayıcıyı sıfırla
+            m_runDustTimer = 0.0f;
+        }
+
+
         // landing detection → shake + DUST
         if (!m_wasGround && m_player.onGround) {
             // Yaklaşık iniş hızı

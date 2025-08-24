@@ -113,6 +113,11 @@ namespace Erlik {
         float m_shakeDecay = 2.5f;  // s^-1
         float m_shakeAmp = 2.0f;  // px @ zoom=1
 
+        // Run foot dust (timer-based)
+        float m_runDustTimer = 0.0f;   // geri sayým
+        float m_runDustMinSpd = 35.0f; // tetik eþiði (px/s)
+
+
     };
 
 } // namespace Erlik
