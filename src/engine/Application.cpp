@@ -239,13 +239,11 @@ void Application::update(double dt) {
                 return (ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by);
         };
 
-        // Player AABB (şimdi)
+        // Player AABB (şimdi & önceki frame)
         float ax = m_player.x - m_player.halfW;
         float ay = m_player.y - m_player.halfH;
         float aw = m_player.halfW * 2.f;
         float ah = m_player.halfH * 2.f;
-
-        // Player AABB (önceki frame)
         float pax = m_player.prevX - m_player.halfW;
         float pay = m_player.prevY - m_player.halfH;
 
@@ -256,29 +254,48 @@ void Application::update(double dt) {
             bool prev = overlap(pax, pay, aw, ah, tr.x, tr.y, tr.w, tr.h);
 
             if (now && !prev) {
-                // ENTER
+                // === ENTER ===
                 if (tr.type == "checkpoint") {
-                    m_spawnX = m_player.x;
-                    m_spawnY = m_player.y;
+                    // Spawn'ı TRIGGER MERKEZİNE al (deterministik)
+                    m_spawnX = tr.x + tr.w * 0.5f;
+                    m_spawnY = tr.y + tr.h * 0.5f;
                     SDL_Log("TRIGGER checkpoint: id=%d name=%s", tr.id, tr.name.c_str());
                     SDL_SetWindowTitle(m_window, "Checkpoint!");
                 }
                 else if (tr.type == "door") {
-                    SDL_Log("TRIGGER door: target=%s message=%s",
-                        tr.target.c_str(), tr.message.c_str());
-                    std::string title = "Door -> " + tr.target;
-                    SDL_SetWindowTitle(m_window, title.c_str());
-                    // Gelecek adım: target'a göre yeni .tmj yükle
+                    // Hedef adına göre aynı harita içinde ışınlama
+                    const auto* dst = m_tmj.findTriggerByName(tr.target);
+                    if (dst) {
+                        float nx = dst->x + dst->w * 0.5f;
+                        float ny = dst->y + dst->h * 0.5f;
+                        m_player.x = nx;
+                        m_player.y = ny;
+                        m_player.vx = 0.f;
+                        m_player.vy = 0.f;
+                        SDL_Log("TRIGGER door: %s -> %s (teleport)", tr.name.c_str(), tr.target.c_str());
+                        SDL_SetWindowTitle(m_window, (std::string("Door -> ") + tr.target).c_str());
+
+
+                        // Küçük bir kamera sarsıntısı (keyif için)
+                        m_shake = std::min(1.0f, m_shake + 0.35f);
+                    }
+                    else {
+                        SDL_Log("WARN: door target not found: %s", tr.target.c_str());
+                    }
                 }
-                else { // "region" ve diğerleri
-                    SDL_Log("TRIGGER %s: name=%s message=%s",
-                        tr.type.c_str(), tr.name.c_str(), tr.message.c_str());
+                else { // "region" ve diğer custom türler
                     if (!tr.message.empty()) SDL_SetWindowTitle(m_window, tr.message.c_str());
+                    // zoom property varsa uygula (0 ise yok say)
+                    if (tr.zoom > 0.0f) {
+                        m_cam.zoom = std::clamp(tr.zoom, 0.25f, 3.0f);
+                    }
+                    SDL_Log("TRIGGER %s: name=%s zoom=%.2f", tr.type.c_str(), tr.name.c_str(), tr.zoom);
                 }
 
                 if (tr.once) m_triggersFired.insert(tr.id);
             }
         }
+
 
 
         // ① Yüz yönünü güncelle (anim flip için)

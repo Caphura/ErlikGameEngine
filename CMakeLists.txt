@@ -29,6 +29,10 @@ if (MSVC)
     target_compile_options(erlik PRIVATE /W4 /permissive- /Zc:preprocessor)
 endif()
 
+if (MSVC)
+  add_compile_options(/utf-8)
+endif()
+
 find_package(SDL2 CONFIG REQUIRED)
 find_package(SDL2_image CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)

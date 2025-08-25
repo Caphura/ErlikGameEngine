@@ -15,6 +15,7 @@ namespace Erlik {
         for (auto& c : s) c = (char)std::tolower((unsigned char)c);
         return s;
     }
+
     static bool json_bool_or(const nlohmann::json& o, const char* name, bool defv) {
         if (!o.contains("properties")) return defv;
         for (auto& p : o["properties"]) {
@@ -24,6 +25,7 @@ namespace Erlik {
         }
         return defv;
     }
+
     static std::string json_str_or(const nlohmann::json& o, const char* name, const std::string& defv) {
         if (!o.contains("properties")) return defv;
         for (auto& p : o["properties"]) {
@@ -36,6 +38,20 @@ namespace Erlik {
         }
         return defv;
     }
+
+    static float json_float_or(const nlohmann::json& o, const char* name, float defv) {
+        if (!o.contains("properties")) return defv;
+        for (auto& p : o["properties"]) {
+            if (p.value("name", "") == name) {
+                if (p.contains("value")) {
+                    if (p["value"].is_number()) return p["value"].get<float>();
+                    if (p["value"].is_string()) { try { return std::stof(p["value"].get<std::string>()); } catch (...) {} }
+                }
+            }
+        }
+        return defv;
+    }
+
 
     std::string TMJMap::dirOf(const std::string& p) {
         size_t pos = p.find_last_of("/\\");
@@ -168,6 +184,7 @@ namespace Erlik {
                     t.once = json_bool_or(O, "once", false);
                     t.target = json_str_or(O, "target", "");
                     t.message = json_str_or(O, "message", "");
+                    t.zoom = json_float_or(O, "zoom", 0.0f);
 
                     if (!t.type.empty() && t.w > 0 && t.h > 0)
                         m_triggers.push_back(std::move(t));
@@ -494,6 +511,14 @@ namespace Erlik {
             else if (t.type == "door")  c = SDL_Color{ 80,120,200,90 };
             r2d.fillRect(t.x, t.y, t.w, t.h, c);
         }
+    }
+
+    const Trigger* TMJMap::findTriggerByName(const std::string& name) const {
+        if (name.empty()) return nullptr;
+        for (const auto& t : m_triggers) {
+            if (t.name == name) return &t;
+        }
+        return nullptr;
     }
 
 

@@ -14,6 +14,7 @@ namespace Erlik {
         std::string message;    // properties.message (ops.)
         bool        once = false; // properties.once
         float       x = 0, y = 0, w = 0, h = 0; // world-space rect (top-left + size)
+        float       zoom = 0.0f;   // Region için kamera zoom deðeri
     };
 
     class TMJMap {
@@ -24,6 +25,7 @@ namespace Erlik {
         void drawAbovePlayer(Renderer2D& r2d) const;  // fg=true olanlarý çizer
         const std::vector<Trigger>& triggers() const { return m_triggers; }
         void drawTriggersDebug(class Renderer2D& r2d) const;
+        const Trigger* findTriggerByName(const std::string& name) const;
 
 
         // Fizik için collision grid üret (Tilemap’e doldurur)
