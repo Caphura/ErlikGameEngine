@@ -39,6 +39,7 @@ void Renderer2D::fillRect(float x, float y, float w, float h, SDL_Color color)
         h * m_cam.zoom
     };
     SDL_RenderFillRectF(m_r, &r);
+    m_drawCalls++;
 
     SDL_SetRenderDrawBlendMode(m_r, SDL_BLENDMODE_NONE);
 }

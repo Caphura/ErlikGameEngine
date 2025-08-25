@@ -261,6 +261,7 @@ void Application::update(double dt) {
                     m_spawnY = tr.y + tr.h * 0.5f;
                     SDL_Log("TRIGGER checkpoint: id=%d name=%s", tr.id, tr.name.c_str());
                     SDL_SetWindowTitle(m_window, "Checkpoint!");
+                    pushToast("Checkpoint!", 1.6f);
                 }
                 else if (tr.type == "door") {
                     // Hedef adına göre aynı harita içinde ışınlama
@@ -274,6 +275,7 @@ void Application::update(double dt) {
                         m_player.vy = 0.f;
                         SDL_Log("TRIGGER door: %s -> %s (teleport)", tr.name.c_str(), tr.target.c_str());
                         SDL_SetWindowTitle(m_window, (std::string("Door -> ") + tr.target).c_str());
+                        pushToast("Door: " + tr.name + " -> " + tr.target, 1.8f);
 
 
                         // Küçük bir kamera sarsıntısı (keyif için)
@@ -284,7 +286,9 @@ void Application::update(double dt) {
                     }
                 }
                 else { // "region" ve diğer custom türler
-                    if (!tr.message.empty()) SDL_SetWindowTitle(m_window, tr.message.c_str());
+                    if (!tr.message.empty()) {
+                        pushToast(tr.message, 2.2f);
+                    }
                     // zoom property varsa uygula (0 ise yok say)
                     if (tr.zoom > 0.0f) {
                         m_cam.zoom = std::clamp(tr.zoom, 0.25f, 3.0f);
@@ -292,10 +296,16 @@ void Application::update(double dt) {
                     SDL_Log("TRIGGER %s: name=%s zoom=%.2f", tr.type.c_str(), tr.name.c_str(), tr.zoom);
                 }
 
+
                 if (tr.once) m_triggersFired.insert(tr.id);
             }
         }
 
+        // --- HUD toasts: zaman ilerlet & süresi dolanları at
+        for (auto& it : m_toasts) it.t += (float)dt;
+        while (!m_toasts.empty() && m_toasts.front().t > m_toasts.front().dur) {
+            m_toasts.pop_front();
+        }
 
 
         // ① Yüz yönünü güncelle (anim flip için)
@@ -419,7 +429,7 @@ void Application::update(double dt) {
 
 
 
-        m_r2d->beginFrame();   // her frame başı
+        
         m_res.check(false);    // hot-reload dosya izleme (zaten eklemiştik)
 
     }
@@ -497,6 +507,7 @@ void Application::update(double dt) {
 
 
 void Application::render(){
+    m_r2d->beginFrame();
     m_r2d->setCamera(m_cam);
     m_r2d->clear(12, 12, 16, 255);
 
@@ -545,55 +556,82 @@ void Application::render(){
         }
 
 
-        if (m_text.ready()) {
-            SDL_Color w{ 220,220,220,255 };
-            SDL_Color g{ 180,220,180,255 };
-            SDL_Color y{ 200,200,120,255 };
+        if (m_text.ready())  // === DEBUG OVERLAY TEXT ===
+        {
+            // Renkler
+            const SDL_Color cWhite{ 255,255,255,255 };
+            const SDL_Color cGreen{ 80,220,120,255 };
+            const SDL_Color cYellow{ 255,220,  0,255 };
 
-            auto Lx = (int)bg.x + pad;           // sol sütun x
-            auto Rx = Lx + colW + pad;           // sağ sütun x
-            int  y0 = (int)bg.y + pad;
-            char line[128];
+            // Panel içi yerleşim: bg + padding kullan
+            const int xL = (int)bg.x + pad;           // sol sütun X
+            const int xR = xL + colW + pad;           // sağ sütun X
+            int yL = (int)bg.y + pad;                 // sol sütun ilk satır Y
+            int yR = (int)bg.y + pad;                 // sağ sütun ilk satır Y
+            const int dy = lh;                        // satır aralığı
 
-            // satır 0
+            char line[256];
+
+            // ---- SOL SÜTUN ----
             std::snprintf(line, sizeof(line), "FPS: %.1f", m_currentFPS);
-            m_text.draw(line, Lx, y0, w);
-            std::snprintf(line, sizeof(line), "Anim: %s", m_animc.stateName());
-            m_text.draw(line, Rx, y0, g);
+            m_text.draw(line, xL, yL, cWhite, 1.0f);  yL += dy;
 
-            // satır 1
-            y0 += lh;
             std::snprintf(line, sizeof(line), "DrawCalls: %d", m_r2d->drawCalls());
-            m_text.draw(line, Lx, y0, w);
+            m_text.draw(line, xL, yL, cGreen, 1.0f);  yL += dy;
 
-            // satır 2
-            y0 += lh;
-            std::snprintf(line, sizeof(line), "Coyote: %.0f ms", m_player.coyoteTimer * 1000.f);
-            m_text.draw(line, Lx, y0, y);
-            std::snprintf(line, sizeof(line), "BG[7]: %s", m_dbgShowBG ? "ON" : "OFF");
-            m_text.draw(line, Rx, y0, w);
+            std::snprintf(line, sizeof(line), "Player");
+            m_text.draw(line, xL, yL, cYellow, 1.0f); yL += dy;
 
-            // satır 3
-            y0 += lh;
-            std::snprintf(line, sizeof(line), "Buffer: %.0f ms", m_player.jumpBufferTimer * 1000.f);
-            m_text.draw(line, Lx, y0, y);
-            std::snprintf(line, sizeof(line), "FG[8]: %s", m_dbgShowFG ? "ON" : "OFF");
-            m_text.draw(line, Rx, y0, w);
+            std::snprintf(line, sizeof(line), "x=%.1f", m_player.x);
+            m_text.draw(line, xL, yL, cYellow, 1.0f); yL += dy;
 
-            // satır 4
-            y0 += lh;
-            std::snprintf(line, sizeof(line), "COL[9]: %s", m_dbgShowCol ? "ON" : "OFF");
-            m_text.draw(line, Rx, y0, w);
+            std::snprintf(line, sizeof(line), "y=%.1f", m_player.y);
+            m_text.draw(line, xL, yL, cYellow, 1.0f); yL += dy;
+
+            // ---- SAĞ SÜTUN ----
+            std::snprintf(line, sizeof(line), "Zoom: %.2f", m_cam.zoom);
+            m_text.draw(line, xR, yR, cWhite, 1.0f);  yR += dy;
+
+            std::snprintf(line, sizeof(line), "Layers: BG[%s] FG[%s]",
+                m_dbgShowBG ? "on" : "off",
+                m_dbgShowFG ? "on" : "off");
+            m_text.draw(line, xR, yR, cGreen, 1.0f);  yR += dy;
+
+            std::snprintf(line, sizeof(line), "COL/Triggers: %s", m_dbgShowCol ? "on" : "off");
+            m_text.draw(line, xR, yR, cYellow, 1.0f); yR += dy;
         }
         else {
-            // font yoksa yine de başlığa kısa özet yaz
+            // font yoksa kısa özet başlığa
             char title[128];
             std::snprintf(title, sizeof(title), "FPS %.1f | DC %d | Overlay (no font)",
                 m_currentFPS, m_r2d->drawCalls());
             SDL_SetWindowTitle(m_window, title);
         }
+
     }
 
+    // --- HUD toasts (sol üst, gölge + alfa ile fade)
+    int x = 12;
+    int y = 12;
+    for (size_t i = 0; i < m_toasts.size(); ++i) {
+        const auto& tt = m_toasts[i];
+
+        // Basit fade-out: son 0.35 sn'de sönsün
+        float a = 1.0f;
+        const float fade = 0.35f;
+        if (tt.t > tt.dur - fade) {
+            a = std::max(0.f, 1.f - (tt.t - (tt.dur - fade)) / fade);
+        }
+
+        // Alfa’ları hesapla
+        Uint8 aText = (Uint8)std::round(255.f * a);
+        Uint8 aShadow = (Uint8)std::round(200.f * a);
+
+        // Gölge (1px offset)
+        m_text.draw(tt.text.c_str(), x + 1, y + 1 + (int)i * 18, SDL_Color{ 0,0,0,aShadow }, 1.0f);
+        m_text.draw(tt.text.c_str(), x, y + (int)i * 18, SDL_Color{ 255,255,255,aText }, 1.0f);
+
+    }
 
 
 
@@ -694,6 +732,12 @@ void Application::notifyHUD(const char* msg, SDL_Color col, float seconds)
 
     m_hudColor = col;
     m_hudTimer = seconds > 0.f ? seconds : 0.f;
+}
+
+void Application::pushToast(const std::string& msg, float dur) {
+    if (msg.empty()) return;
+    Toast t; t.text = msg; t.t = 0.f; t.dur = dur;
+    m_toasts.push_back(std::move(t));
 }
 
 

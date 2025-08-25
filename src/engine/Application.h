@@ -14,6 +14,7 @@
 #include "AnimatorController.h"
 #include "Particles.h"
 #include <unordered_set>
+#include <deque>
 
 
 struct SDL_Window;
@@ -42,6 +43,14 @@ namespace Erlik {
         bool m_dbgShowBG = true;
         bool m_dbgShowFG = true;
         bool m_dbgShowCol = false; // collision heatmap
+
+        struct Toast {
+            std::string text;
+            float t = 0.f;          // geçen süre
+            float dur = 2.5f;       // ekranda kalma süresi (sn)
+        };
+        std::deque<Toast> m_toasts; // HUD toast kuyruðu
+        void pushToast(const std::string& msg, float dur = 2.5f);
         
 
     private:
@@ -120,6 +129,8 @@ namespace Erlik {
         // Trigger state
         std::unordered_set<int> m_triggersFired; // once=true olanlar için
         float m_spawnX = 0.f, m_spawnY = 0.f;    // checkpoint noktasý
+
+
 
 
     };
