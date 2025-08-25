@@ -6,8 +6,7 @@ namespace Erlik {
 
     void ParticleSystem::update(float dt)
     {
-        const float gravity = 900.f;   // toz yere doðru çöker
-        const float drag = 2.5f;    // yatay fren
+        const float baseGravity = 900.f;
 
         for (int i = 0; i < m_cap; ++i) {
             auto& p = m_pool[i];
@@ -16,16 +15,16 @@ namespace Erlik {
             p.life += dt;
             if (p.life >= p.maxLife) { p.alive = false; continue; }
 
-            // hareket
-            p.vy += gravity * dt;
-            p.vx -= p.vx * drag * dt;        // basit sürtünme
+            // hareket: her parçacýðýn kendi katsayýlarý
+            p.vy += (baseGravity * p.gravityScale) * dt;
+            p.vx -= p.vx * p.drag * dt;
             p.x += p.vx * dt;
             p.y += p.vy * dt;
 
-            // boyutu hafif küçült
             p.size = std::max(0.f, p.size - 20.f * dt);
         }
     }
+
 
     void ParticleSystem::draw(Renderer2D& r2d) const
     {
@@ -52,12 +51,43 @@ namespace Erlik {
             p.alive = true;
             p.x = x + frand(-6.f, 6.f);
             p.y = y + frand(-3.f, 2.f);
-            p.vx = (baseSpeed + frand(-60.f, 60.f)) * dir * frand(0.6f, 1.0f);
-            p.vy = frand(-220.f, -120.f);          // önce hafif yukarý
-            p.size = frand(5.f, 9.f);
+            // daha bulutumsu: daha az hýz, daha fazla sürtünme, biraz daha iri
+            p.vx = (baseSpeed * frand(0.5f, 0.9f) + frand(-40.f, 40.f)) * dir;
+            p.vy = frand(-180.f, -90.f);
+            p.size = frand(6.f, 10.f);
             p.life = 0.f;
-            p.maxLife = frand(0.35f, 0.6f);
-            p.baseA = 230;
+            p.maxLife = frand(0.40f, 0.70f);
+            p.baseA = 220;
+            p.gravityScale = 0.8f;   // daha yavaþ çöksün
+            p.drag = 5.5f;   // yatayda çabuk sönsün
+
+        }
+    }
+
+    void ParticleSystem::emitFootDust(float x, float y, int count, float dir)
+    {
+        count = std::max(1, std::min(count, 12));
+        for (int n = 0; n < count; ++n) {
+            auto& p = m_pool[m_next];
+            m_next = (m_next + 1) % m_cap;
+
+            p.alive = true;
+            p.x = x + frand(-4.f, 4.f);
+            p.y = y + frand(-2.f, 2.f);
+
+            // daha YAVAÞ ve GERÝYE doðru
+            p.vx = frand(20.f, 60.f) * dir;   // landing’e göre çok daha düþük
+            p.vy = frand(-60.f, -20.f);       // hafif yukarý, yavaþ
+
+            p.size = frand(4.f, 7.f);
+            p.life = 0.f;
+            p.maxLife = frand(0.28f, 0.48f);
+
+            // toz: daha çabuk yatýþsýn, az yerçekimi
+            p.gravityScale = 0.35f;           // landing 1.0 iken koþu 0.35
+            p.drag = 6.0f;            // yatayda çabuk dur
+
+            p.baseA = 210;
         }
     }
 

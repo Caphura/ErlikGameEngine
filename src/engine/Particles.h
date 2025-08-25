@@ -8,6 +8,8 @@ namespace Erlik {
     struct Particle {
         float x = 0, y = 0, vx = 0, vy = 0, size = 6;
         float life = 0, maxLife = 0.5f;
+        float gravityScale = 1.0f;   // YENÝ: her parçacýk için yerçekimi katsayýsý
+        float drag = 2.5f;   // YENÝ: yatay fren katsayýsý
         Uint8  baseA = 255;
         bool   alive = false;
     };
@@ -20,7 +22,7 @@ namespace Erlik {
         void clear() { for (int i = 0; i < MAX_CAP; ++i) m_pool[i].alive = false; m_next = 0; }
         void update(float dt);
         void draw(Renderer2D& r2d) const;
-
+        void emitFootDust(float x, float y, int count, float dir);
         // iniþte toz — dir: +1 saða, -1 sola; baseSpeed: baþlangýç yatay hýz
         void emitDust(float x, float y, int count, float dir, float baseSpeed);
 

@@ -287,39 +287,36 @@ void Application::update(double dt) {
         if (m_player.onGround) {
             float speed = std::fabs(m_player.vx);
             if (speed > m_runDustMinSpd) {
-                // hız faktörü: 0..1 (movespeed'e oranla)
                 float k = std::clamp(speed / m_pp.moveSpeed, 0.0f, 1.0f);
 
-                // hızlandıkça daha sık puf: 0.18s..0.06s aralığı
+                // üretim aralığını SEYRELT: 0.24s..0.12s
                 m_runDustTimer -= (float)dt;
                 if (m_runDustTimer <= 0.0f) {
-                    m_runDustTimer = 0.18f - 0.12f * k;
+                    m_runDustTimer = 0.24f - 0.12f * k;
 
-                    // ayak hizası
-                    float fx = m_player.x + (m_faceRight ? +m_player.halfW * 0.55f
-                        : -m_player.halfW * 0.55f);
+                    // ARKADA spawn: karakterin baktığı yönün tersinde offset
+                    float behind = (m_faceRight ? -1.f : +1.f) * (m_player.halfW * 0.65f);
+                    float fx = m_player.x + behind;
                     float fy = m_player.y + m_player.halfH - 2.0f;
 
-                    // yön (karakterin baktığı tarafa doğru) ve temel hız
-                    float dir = m_faceRight ? 1.0f : -1.0f;
-                    float baseV = 80.0f + 120.0f * k;
+                    // yön: ARKAYA doğru (baktığının tersi)
+                    float dirBack = (m_faceRight ? -1.f : +1.f);
 
-                    // ana puf
-                    m_fx.emitDust(fx, fy, 2 + int(2 * k), dir, baseV);
+                    // sayıyı da düşük tut
+                    int count = 1 + (k > 0.65f ? 1 : 0);
 
-                    // hafif karşı tarafa da minik puf (daha doğal görünür)
-                    m_fx.emitDust(fx, fy, 1, -dir, baseV * 0.5f);
+                    // yeni koşu tozu yayıcıyı kullan
+                    m_fx.emitFootDust(fx, fy, count, dirBack);
                 }
             }
             else {
-                // yavaşken zamanlayıcıyı sıfırla
                 m_runDustTimer = 0.0f;
             }
         }
         else {
-            // havada: zamanlayıcıyı sıfırla
             m_runDustTimer = 0.0f;
         }
+
 
 
         // landing detection → shake + DUST
@@ -333,11 +330,18 @@ void Application::update(double dt) {
             float fx = m_player.x;
             float fy = m_player.y + m_player.halfH - 2.f;
 
-            int   count = 8 + int(10 * impact);
-            float dir = m_faceRight ? 1.f : -1.f;
-            float baseV = 100.f + 180.f * impact;
+            int   total = 8 + int(10 * impact);
+            int   each = std::max(1, total / 2);
+            float baseV = 90.f + 140.f * impact;   // biraz daha yumuşak hız
 
-            m_fx.emitDust(fx, fy, count, dir, baseV);
+            // iki yana bulut
+            m_fx.emitDust(fx, fy, each, +1.f, baseV);
+            m_fx.emitDust(fx, fy, each, -1.f, baseV);
+
+            // çok küçük bir merkez pufu: “toz yükseliyor” hissi
+            m_fx.emitFootDust(fx, fy, 1, +1.f);
+            m_fx.emitFootDust(fx, fy, 1, -1.f);
+
         }
         m_fx.update((float)dt);
 
