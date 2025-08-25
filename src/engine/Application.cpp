@@ -103,6 +103,10 @@ bool Application::init(){
     // Player start near top-left
     m_player.x = 64.f; m_player.y = 64.f; m_player.vx=0.f; m_player.vy=0.f; m_player.onGround=false;
 
+    m_spawnX = m_player.x;
+    m_spawnY = m_player.y;
+
+
     // Visual sprite
     if (m_atlas.loadGrid(m_renderer, "assets/atlas8x1.png", 32, 32, 0, 0)) {
         int total = m_atlas.frameCount();
@@ -149,9 +153,11 @@ void Application::processEvents(bool& running) {
     if (Input::keyPressed(SDL_SCANCODE_F))      m_follow = !m_follow;
 
     if (Input::keyPressed(SDL_SCANCODE_R)) {
-        m_player.x = 64.f; m_player.y = 64.f; m_player.vx = 0.f; m_player.vy = 0.f; m_player.onGround = false;
-        m_cam = {};
+        m_player.x = m_spawnX;
+        m_player.y = m_spawnY;
+        m_player.vx = m_player.vy = 0.f;
     }
+
 
     // Anim hız önayarları
     if (Input::keyPressed(SDL_SCANCODE_O)) { float f = m_anim.fps() * 0.5f; if (f < 1.0f) f = 1.0f; m_anim.setFPS(f); }
@@ -227,6 +233,53 @@ void Application::update(double dt) {
 
         // Fizik çağrısı (YENİ imza!)
         integrate(m_player, m_map, m_pp, (float)dt, left, right, jumpPressed, jumpHeld, dropRequest);
+
+        auto overlap = [](float ax, float ay, float aw, float ah,
+            float bx, float by, float bw, float bh)->bool {
+                return (ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by);
+        };
+
+        // Player AABB (şimdi)
+        float ax = m_player.x - m_player.halfW;
+        float ay = m_player.y - m_player.halfH;
+        float aw = m_player.halfW * 2.f;
+        float ah = m_player.halfH * 2.f;
+
+        // Player AABB (önceki frame)
+        float pax = m_player.prevX - m_player.halfW;
+        float pay = m_player.prevY - m_player.halfH;
+
+        for (const auto& tr : m_tmj.triggers()) {
+            if (tr.once && m_triggersFired.count(tr.id)) continue;
+
+            bool now = overlap(ax, ay, aw, ah, tr.x, tr.y, tr.w, tr.h);
+            bool prev = overlap(pax, pay, aw, ah, tr.x, tr.y, tr.w, tr.h);
+
+            if (now && !prev) {
+                // ENTER
+                if (tr.type == "checkpoint") {
+                    m_spawnX = m_player.x;
+                    m_spawnY = m_player.y;
+                    SDL_Log("TRIGGER checkpoint: id=%d name=%s", tr.id, tr.name.c_str());
+                    SDL_SetWindowTitle(m_window, "Checkpoint!");
+                }
+                else if (tr.type == "door") {
+                    SDL_Log("TRIGGER door: target=%s message=%s",
+                        tr.target.c_str(), tr.message.c_str());
+                    std::string title = "Door -> " + tr.target;
+                    SDL_SetWindowTitle(m_window, title.c_str());
+                    // Gelecek adım: target'a göre yeni .tmj yükle
+                }
+                else { // "region" ve diğerleri
+                    SDL_Log("TRIGGER %s: name=%s message=%s",
+                        tr.type.c_str(), tr.name.c_str(), tr.message.c_str());
+                    if (!tr.message.empty()) SDL_SetWindowTitle(m_window, tr.message.c_str());
+                }
+
+                if (tr.once) m_triggersFired.insert(tr.id);
+            }
+        }
+
 
         // ① Yüz yönünü güncelle (anim flip için)
         if (std::fabs(m_player.vx) > 1.f) {
@@ -469,6 +522,11 @@ void Application::render(){
         SDL_FRect bg{ (float)(vw - panelW - 10), 10.f, (float)panelW, (float)panelH };
         SDL_RenderFillRectF(m_renderer, &bg);
         SDL_SetRenderDrawBlendMode(m_renderer, SDL_BLENDMODE_NONE);
+
+        if (m_dbgShowCol) {
+            m_tmj.drawTriggersDebug(*m_r2d);
+        }
+
 
         if (m_text.ready()) {
             SDL_Color w{ 220,220,220,255 };

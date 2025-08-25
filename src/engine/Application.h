@@ -13,7 +13,7 @@
 #include "TextRenderer.h"
 #include "AnimatorController.h"
 #include "Particles.h"
-
+#include <unordered_set>
 
 
 struct SDL_Window;
@@ -116,6 +116,10 @@ namespace Erlik {
         // Run foot dust (timer-based)
         float m_runDustTimer = 0.0f;   // geri sayým
         float m_runDustMinSpd = 35.0f; // tetik eþiði (px/s)
+
+        // Trigger state
+        std::unordered_set<int> m_triggersFired; // once=true olanlar için
+        float m_spawnX = 0.f, m_spawnY = 0.f;    // checkpoint noktasý
 
 
     };

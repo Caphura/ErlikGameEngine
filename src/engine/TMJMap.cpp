@@ -5,11 +5,37 @@
 #include <cmath>
 #include <algorithm>
 #include <SDL.h>
-
+#include <cctype>
 
 using nlohmann::json;
 
 namespace Erlik {
+
+    static std::string tolower_copy(std::string s) {
+        for (auto& c : s) c = (char)std::tolower((unsigned char)c);
+        return s;
+    }
+    static bool json_bool_or(const nlohmann::json& o, const char* name, bool defv) {
+        if (!o.contains("properties")) return defv;
+        for (auto& p : o["properties"]) {
+            if (p.value("name", "") == name) {
+                if (p.contains("value") && p["value"].is_boolean()) return p["value"].get<bool>();
+            }
+        }
+        return defv;
+    }
+    static std::string json_str_or(const nlohmann::json& o, const char* name, const std::string& defv) {
+        if (!o.contains("properties")) return defv;
+        for (auto& p : o["properties"]) {
+            if (p.value("name", "") == name) {
+                if (p.contains("value")) {
+                    if (p["value"].is_string())  return p["value"].get<std::string>();
+                    if (p["value"].is_number())  return p["value"].dump(); // sayýyý stringle
+                }
+            }
+        }
+        return defv;
+    }
 
     std::string TMJMap::dirOf(const std::string& p) {
         size_t pos = p.find_last_of("/\\");
@@ -121,6 +147,35 @@ namespace Erlik {
             SDL_Log("TMJMap: tileset yuklenemedi (tried \"%s\" and \"%s\")", try1.c_str(), try2.c_str());
             return false;
         }
+
+        // --- Parse object layer "triggers" ---
+        m_triggers.clear();
+        if (j.contains("layers") && j["layers"].is_array()) {
+            for (const auto& L : j["layers"]) {
+                if (L.value("type", "") != "objectgroup") continue;
+                if (tolower_copy(L.value("name", "")) != "triggers") continue;
+                if (!L.contains("objects") || !L["objects"].is_array()) continue;
+
+                for (const auto& O : L["objects"]) {
+                    Trigger t;
+                    t.id = O.value("id", 0);
+                    t.name = O.value("name", "");
+                    t.type = tolower_copy(O.value("type", ""));
+                    t.x = O.value("x", 0.0f);
+                    t.y = O.value("y", 0.0f);
+                    t.w = O.value("width", 0.0f);
+                    t.h = O.value("height", 0.0f);
+                    t.once = json_bool_or(O, "once", false);
+                    t.target = json_str_or(O, "target", "");
+                    t.message = json_str_or(O, "message", "");
+
+                    if (!t.type.empty() && t.w > 0 && t.h > 0)
+                        m_triggers.push_back(std::move(t));
+                }
+            }
+        }
+        SDL_Log("INFO: TMJ triggers loaded: %d", (int)m_triggers.size());
+
 
         // --- Katmanlarý oku ---
         // --- Katmanlarý oku ---
@@ -428,6 +483,17 @@ namespace Erlik {
 
         bool ok = out.adoptGrid(m_mapCols, m_mapRows, m_tileW, std::move(grid));
         return ok && (solids > 0 || oneways > 0);
+    }
+
+    
+
+    void TMJMap::drawTriggersDebug(Renderer2D& r2d) const {
+        for (auto& t : m_triggers) {
+            SDL_Color c{ 180,120,40,90 }; // region
+            if (t.type == "checkpoint") c = SDL_Color{ 80,180,80,90 };
+            else if (t.type == "door")  c = SDL_Color{ 80,120,200,90 };
+            r2d.fillRect(t.x, t.y, t.w, t.h, c);
+        }
     }
 
 
