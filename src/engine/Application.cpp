@@ -23,7 +23,9 @@ bool Application::init(){
     m_renderer = SDL_CreateRenderer(m_window,-1,SDL_RENDERER_ACCELERATED);
     if(!m_renderer){ std::fprintf(stderr,"SDL_CreateRenderer failed: %s\n", SDL_GetError()); return false; }
     m_r2d = new Renderer2D(m_renderer);
-    Input::init();
+    
+    // Gamepad’i hazırla
+    Input::initGamepads();
 
     // World setup
    // if(!m_map.loadCSV("assets/level_aabb.csv")) std::fprintf(stderr,"[warn] assets/level_aabb.csv not found\n");
@@ -103,6 +105,10 @@ bool Application::init(){
     // Player start near top-left
     m_player.x = 64.f; m_player.y = 64.f; m_player.vx=0.f; m_player.vy=0.f; m_player.onGround=false;
 
+    m_spawnX = m_player.x;
+    m_spawnY = m_player.y;
+
+
     // Visual sprite
     if (m_atlas.loadGrid(m_renderer, "assets/atlas8x1.png", 32, 32, 0, 0)) {
         int total = m_atlas.frameCount();
@@ -132,7 +138,8 @@ bool Application::init(){
 
 void Application::shutdown(){
     delete m_r2d; m_r2d=nullptr;
-    Input::shutdown();
+   
+    Input::shutdownGamepads();
     if(m_renderer){ SDL_DestroyRenderer(m_renderer); m_renderer=nullptr; }
     if(m_window){ SDL_DestroyWindow(m_window); m_window=nullptr; }
     IMG_Quit(); SDL_Quit();
@@ -140,18 +147,24 @@ void Application::shutdown(){
 
 void Application::processEvents(bool& running) {
     SDL_Event e;
+    Input::beginFrame();
     while (SDL_PollEvent(&e)) {
+        Input::handleEvent(e);
         if (e.type == SDL_QUIT) running = false;
     }
 
     if (Input::keyPressed(SDL_SCANCODE_ESCAPE)) running = false;
     if (Input::keyPressed(SDL_SCANCODE_I))      m_paused = !m_paused;
     if (Input::keyPressed(SDL_SCANCODE_F))      m_follow = !m_follow;
+    if (Input::padButtonPressed(SDL_CONTROLLER_BUTTON_START)) m_paused = !m_paused;
+
 
     if (Input::keyPressed(SDL_SCANCODE_R)) {
-        m_player.x = 64.f; m_player.y = 64.f; m_player.vx = 0.f; m_player.vy = 0.f; m_player.onGround = false;
-        m_cam = {};
+        m_player.x = m_spawnX;
+        m_player.y = m_spawnY;
+        m_player.vx = m_player.vy = 0.f;
     }
+
 
     // Anim hız önayarları
     if (Input::keyPressed(SDL_SCANCODE_O)) { float f = m_anim.fps() * 0.5f; if (f < 1.0f) f = 1.0f; m_anim.setFPS(f); }
@@ -173,13 +186,8 @@ void Application::processEvents(bool& running) {
         m_res.check(true);
     }
 
-    // Overlay toggle
-    if (Input::keyPressed(SDL_SCANCODE_F1)) {
-        m_dbgOverlay = !m_dbgOverlay;
-        std::fprintf(stderr, "[dbg] overlay = %s\n", m_dbgOverlay ? "ON" : "OFF");
-        notifyHUD(m_dbgOverlay ? "Debug ON" : "Debug OFF",
-            SDL_Color{ 70,130,200,255 }, 0.8f);
-    }
+    
+    
 
     // Space “bu framede basıldı” + yerde + S ile aşağı basmıyorken
     if (Input::keyPressed(SDL_SCANCODE_SPACE) && m_player.onGround && !Input::keyDown(SDL_SCANCODE_S)) {
@@ -223,10 +231,111 @@ void Application::update(double dt) {
         bool downHeld = Input::keyDown(SDL_SCANCODE_S) || Input::keyDown(SDL_SCANCODE_DOWN);
         bool dropRequest = downHeld && jumpPressed;
 
+        // ---- GAMEPAD KATKISI ----
+        float padX = Input::padAxisLX();
+        float padY = Input::padAxisLY();
 
+        // hareket: stick veya dpad
+        left = left || (padX < -0.25f) || Input::padButtonDown(SDL_CONTROLLER_BUTTON_DPAD_LEFT);
+        right = right || (padX > 0.25f) || Input::padButtonDown(SDL_CONTROLLER_BUTTON_DPAD_RIGHT);
+
+        // zıplama: A (veya Cross) tuşu
+        jumpPressed = jumpPressed || Input::padButtonPressed(SDL_CONTROLLER_BUTTON_A);
+        jumpHeld = jumpHeld || Input::padButtonDown(SDL_CONTROLLER_BUTTON_A);
+
+        // aşağı + zıplama ile drop-through: stick aşağı ya da dpad down + A
+        bool padDown = (padY > 0.45f) || Input::padButtonDown(SDL_CONTROLLER_BUTTON_DPAD_DOWN);
+        downHeld = downHeld || padDown;
+        dropRequest = dropRequest || (padDown && Input::padButtonPressed(SDL_CONTROLLER_BUTTON_A));
+
+        // Overlay toggle
+        // F1 / Pad Y — Debug Overlay
+        static bool prevDbg = m_dbgOverlay;
+        if (Input::keyPressed(SDL_SCANCODE_F1)) {
+            m_dbgOverlay = !m_dbgOverlay;
+        }
+        if (prevDbg != m_dbgOverlay) {
+            std::fprintf(stderr, "[dbg] overlay = %s\n", m_dbgOverlay ? "ON" : "OFF");
+            notifyHUD(m_dbgOverlay ? "DBG ON" : "DBG OFF", SDL_Color{ 180,180,180,255 }, 0.8f);
+            prevDbg = m_dbgOverlay;
+        }
 
         // Fizik çağrısı (YENİ imza!)
         integrate(m_player, m_map, m_pp, (float)dt, left, right, jumpPressed, jumpHeld, dropRequest);
+
+        auto overlap = [](float ax, float ay, float aw, float ah,
+            float bx, float by, float bw, float bh)->bool {
+                return (ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by);
+        };
+
+        // Player AABB (şimdi & önceki frame)
+        float ax = m_player.x - m_player.halfW;
+        float ay = m_player.y - m_player.halfH;
+        float aw = m_player.halfW * 2.f;
+        float ah = m_player.halfH * 2.f;
+        float pax = m_player.prevX - m_player.halfW;
+        float pay = m_player.prevY - m_player.halfH;
+
+        for (const auto& tr : m_tmj.triggers()) {
+            if (tr.once && m_triggersFired.count(tr.id)) continue;
+
+            bool now = overlap(ax, ay, aw, ah, tr.x, tr.y, tr.w, tr.h);
+            bool prev = overlap(pax, pay, aw, ah, tr.x, tr.y, tr.w, tr.h);
+
+            if (now && !prev) {
+                // === ENTER ===
+                if (tr.type == "checkpoint") {
+                    // Spawn'ı TRIGGER MERKEZİNE al (deterministik)
+                    m_spawnX = tr.x + tr.w * 0.5f;
+                    m_spawnY = tr.y + tr.h * 0.5f;
+                    SDL_Log("TRIGGER checkpoint: id=%d name=%s", tr.id, tr.name.c_str());
+                    SDL_SetWindowTitle(m_window, "Checkpoint!");
+                    pushToast("Checkpoint!", 1.6f);
+                }
+                else if (tr.type == "door") {
+                    // Hedef adına göre aynı harita içinde ışınlama
+                    const auto* dst = m_tmj.findTriggerByName(tr.target);
+                    if (dst) {
+                        float nx = dst->x + dst->w * 0.5f;
+                        float ny = dst->y + dst->h * 0.5f;
+                        m_player.x = nx;
+                        m_player.y = ny;
+                        m_player.vx = 0.f;
+                        m_player.vy = 0.f;
+                        SDL_Log("TRIGGER door: %s -> %s (teleport)", tr.name.c_str(), tr.target.c_str());
+                        SDL_SetWindowTitle(m_window, (std::string("Door -> ") + tr.target).c_str());
+                        pushToast("Door: " + tr.name + " -> " + tr.target, 1.8f);
+
+
+                        // Küçük bir kamera sarsıntısı (keyif için)
+                        m_shake = std::min(1.0f, m_shake + 0.35f);
+                    }
+                    else {
+                        SDL_Log("WARN: door target not found: %s", tr.target.c_str());
+                    }
+                }
+                else { // "region" ve diğer custom türler
+                    if (!tr.message.empty()) {
+                        pushToast(tr.message, 2.2f);
+                    }
+                    // zoom property varsa uygula (0 ise yok say)
+                    if (tr.zoom > 0.0f) {
+                        m_cam.zoom = std::clamp(tr.zoom, 0.25f, 3.0f);
+                    }
+                    SDL_Log("TRIGGER %s: name=%s zoom=%.2f", tr.type.c_str(), tr.name.c_str(), tr.zoom);
+                }
+
+
+                if (tr.once) m_triggersFired.insert(tr.id);
+            }
+        }
+
+        // --- HUD toasts: zaman ilerlet & süresi dolanları at
+        for (auto& it : m_toasts) it.t += (float)dt;
+        while (!m_toasts.empty() && m_toasts.front().t > m_toasts.front().dur) {
+            m_toasts.pop_front();
+        }
+
 
         // ① Yüz yönünü güncelle (anim flip için)
         if (std::fabs(m_player.vx) > 1.f) {
@@ -341,15 +450,16 @@ void Application::update(double dt) {
             // çok küçük bir merkez pufu: “toz yükseliyor” hissi
             m_fx.emitFootDust(fx, fy, 1, +1.f);
             m_fx.emitFootDust(fx, fy, 1, -1.f);
-
+            Input::rumble(18000, 28000, (Uint32)(80 + 120 * impact)); // 80–200ms hafif rumble
         }
+
         m_fx.update((float)dt);
 
         m_wasGround = m_player.onGround;
 
 
 
-        m_r2d->beginFrame();   // her frame başı
+        
         m_res.check(false);    // hot-reload dosya izleme (zaten eklemiştik)
 
     }
@@ -427,6 +537,7 @@ void Application::update(double dt) {
 
 
 void Application::render(){
+    m_r2d->beginFrame();
     m_r2d->setCamera(m_cam);
     m_r2d->clear(12, 12, 16, 255);
 
@@ -470,55 +581,87 @@ void Application::render(){
         SDL_RenderFillRectF(m_renderer, &bg);
         SDL_SetRenderDrawBlendMode(m_renderer, SDL_BLENDMODE_NONE);
 
-        if (m_text.ready()) {
-            SDL_Color w{ 220,220,220,255 };
-            SDL_Color g{ 180,220,180,255 };
-            SDL_Color y{ 200,200,120,255 };
+        if (m_dbgShowCol) {
+            m_tmj.drawTriggersDebug(*m_r2d);
+        }
 
-            auto Lx = (int)bg.x + pad;           // sol sütun x
-            auto Rx = Lx + colW + pad;           // sağ sütun x
-            int  y0 = (int)bg.y + pad;
-            char line[128];
 
-            // satır 0
+        if (m_text.ready())  // === DEBUG OVERLAY TEXT ===
+        {
+            // Renkler
+            const SDL_Color cWhite{ 255,255,255,255 };
+            const SDL_Color cGreen{ 80,220,120,255 };
+            const SDL_Color cYellow{ 255,220,  0,255 };
+
+            // Panel içi yerleşim: bg + padding kullan
+            const int xL = (int)bg.x + pad;           // sol sütun X
+            const int xR = xL + colW + pad;           // sağ sütun X
+            int yL = (int)bg.y + pad;                 // sol sütun ilk satır Y
+            int yR = (int)bg.y + pad;                 // sağ sütun ilk satır Y
+            const int dy = lh;                        // satır aralığı
+
+            char line[256];
+
+            // ---- SOL SÜTUN ----
             std::snprintf(line, sizeof(line), "FPS: %.1f", m_currentFPS);
-            m_text.draw(line, Lx, y0, w);
-            std::snprintf(line, sizeof(line), "Anim: %s", m_animc.stateName());
-            m_text.draw(line, Rx, y0, g);
+            m_text.draw(line, xL, yL, cWhite, 1.0f);  yL += dy;
 
-            // satır 1
-            y0 += lh;
             std::snprintf(line, sizeof(line), "DrawCalls: %d", m_r2d->drawCalls());
-            m_text.draw(line, Lx, y0, w);
+            m_text.draw(line, xL, yL, cGreen, 1.0f);  yL += dy;
 
-            // satır 2
-            y0 += lh;
-            std::snprintf(line, sizeof(line), "Coyote: %.0f ms", m_player.coyoteTimer * 1000.f);
-            m_text.draw(line, Lx, y0, y);
-            std::snprintf(line, sizeof(line), "BG[7]: %s", m_dbgShowBG ? "ON" : "OFF");
-            m_text.draw(line, Rx, y0, w);
+            std::snprintf(line, sizeof(line), "Player");
+            m_text.draw(line, xL, yL, cYellow, 1.0f); yL += dy;
 
-            // satır 3
-            y0 += lh;
-            std::snprintf(line, sizeof(line), "Buffer: %.0f ms", m_player.jumpBufferTimer * 1000.f);
-            m_text.draw(line, Lx, y0, y);
-            std::snprintf(line, sizeof(line), "FG[8]: %s", m_dbgShowFG ? "ON" : "OFF");
-            m_text.draw(line, Rx, y0, w);
+            std::snprintf(line, sizeof(line), "x=%.1f", m_player.x);
+            m_text.draw(line, xL, yL, cYellow, 1.0f); yL += dy;
 
-            // satır 4
-            y0 += lh;
-            std::snprintf(line, sizeof(line), "COL[9]: %s", m_dbgShowCol ? "ON" : "OFF");
-            m_text.draw(line, Rx, y0, w);
+            std::snprintf(line, sizeof(line), "y=%.1f", m_player.y);
+            m_text.draw(line, xL, yL, cYellow, 1.0f); yL += dy;
+
+            // ---- SAĞ SÜTUN ----
+            std::snprintf(line, sizeof(line), "Zoom: %.2f", m_cam.zoom);
+            m_text.draw(line, xR, yR, cWhite, 1.0f);  yR += dy;
+
+            std::snprintf(line, sizeof(line), "Layers: BG[%s] FG[%s]",
+                m_dbgShowBG ? "on" : "off",
+                m_dbgShowFG ? "on" : "off");
+            m_text.draw(line, xR, yR, cGreen, 1.0f);  yR += dy;
+
+            std::snprintf(line, sizeof(line), "COL/Triggers: %s", m_dbgShowCol ? "on" : "off");
+            m_text.draw(line, xR, yR, cYellow, 1.0f); yR += dy;
         }
         else {
-            // font yoksa yine de başlığa kısa özet yaz
+            // font yoksa kısa özet başlığa
             char title[128];
             std::snprintf(title, sizeof(title), "FPS %.1f | DC %d | Overlay (no font)",
                 m_currentFPS, m_r2d->drawCalls());
             SDL_SetWindowTitle(m_window, title);
         }
+
     }
 
+    // --- HUD toasts (sol üst, gölge + alfa ile fade)
+    int x = 12;
+    int y = 12;
+    for (size_t i = 0; i < m_toasts.size(); ++i) {
+        const auto& tt = m_toasts[i];
+
+        // Basit fade-out: son 0.35 sn'de sönsün
+        float a = 1.0f;
+        const float fade = 0.35f;
+        if (tt.t > tt.dur - fade) {
+            a = std::max(0.f, 1.f - (tt.t - (tt.dur - fade)) / fade);
+        }
+
+        // Alfa’ları hesapla
+        Uint8 aText = (Uint8)std::round(255.f * a);
+        Uint8 aShadow = (Uint8)std::round(200.f * a);
+
+        // Gölge (1px offset)
+        m_text.draw(tt.text.c_str(), x + 1, y + 1 + (int)i * 18, SDL_Color{ 0,0,0,aShadow }, 1.0f);
+        m_text.draw(tt.text.c_str(), x, y + (int)i * 18, SDL_Color{ 255,255,255,aText }, 1.0f);
+
+    }
 
 
 
@@ -592,12 +735,11 @@ int Application::run(){
     bool running=true;
     Uint64 f=SDL_GetPerformanceFrequency(), last=SDL_GetPerformanceCounter();
     while(running){
+        Input::beginFrame();
         Uint64 now=SDL_GetPerformanceCounter(); Uint64 diff=now-last; last=now;
         double dt=(double)diff/(double)f; if(dt>0.1) dt=0.1;
-        Input::beginFrame();
         SDL_PumpEvents();
         processEvents(running);
-        Input::endFrame();
         update(dt);
         render();
     }
@@ -619,6 +761,12 @@ void Application::notifyHUD(const char* msg, SDL_Color col, float seconds)
 
     m_hudColor = col;
     m_hudTimer = seconds > 0.f ? seconds : 0.f;
+}
+
+void Application::pushToast(const std::string& msg, float dur) {
+    if (msg.empty()) return;
+    Toast t; t.text = msg; t.t = 0.f; t.dur = dur;
+    m_toasts.push_back(std::move(t));
 }
 
 

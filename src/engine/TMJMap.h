@@ -6,12 +6,26 @@
 
 namespace Erlik {
 
+    struct Trigger {
+        int         id = 0;   // Tiled object id
+        std::string type;       // "checkpoint" | "door" | "region" (lowercase)
+        std::string name;       // obje adý (ops.)
+        std::string target;     // properties.target (ops.)
+        std::string message;    // properties.message (ops.)
+        bool        once = false; // properties.once
+        float       x = 0, y = 0, w = 0, h = 0; // world-space rect (top-left + size)
+        float       zoom = 0.0f;   // Region için kamera zoom deðeri
+    };
+
     class TMJMap {
     public:
         bool load(SDL_Renderer* r, const std::string& tmjPath);
         void draw(Renderer2D& r2d) const;             // hepsini çizer (debug)
         void drawBelowPlayer(Renderer2D& r2d) const;  // fg=false olanlarý çizer
         void drawAbovePlayer(Renderer2D& r2d) const;  // fg=true olanlarý çizer
+        const std::vector<Trigger>& triggers() const { return m_triggers; }
+        void drawTriggersDebug(class Renderer2D& r2d) const;
+        const Trigger* findTriggerByName(const std::string& name) const;
 
 
         // Fizik için collision grid üret (Tilemap’e doldurur)
@@ -60,6 +74,7 @@ namespace Erlik {
 
         std::string m_baseDir; // resim yolu çözmek için
         std::vector<Layer> m_layers;
+        std::vector<Trigger> m_triggers;
 
         // Yardýmcýlar
         static std::string dirOf(const std::string& path);
