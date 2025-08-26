@@ -23,6 +23,7 @@ add_executable(erlik
     src/engine/Tilemap.h
     src/engine/Physics.cpp
     src/engine/Physics.h
+    src/engine/Audio.cpp  
 )
 
 if (MSVC)
@@ -37,11 +38,14 @@ find_package(SDL2 CONFIG REQUIRED)
 find_package(SDL2_image CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(SDL2_ttf CONFIG REQUIRED)
+find_package(SDL2_mixer CONFIG REQUIRED)
+
 
 target_link_libraries(erlik PRIVATE
     SDL2::SDL2 SDL2::SDL2main SDL2_image::SDL2_image
     nlohmann_json::nlohmann_json
     SDL2_ttf::SDL2_ttf
+    SDL2_mixer::SDL2_mixer
 )
 target_include_directories(erlik PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_sources(erlik PRIVATE
