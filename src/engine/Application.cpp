@@ -23,7 +23,9 @@ bool Application::init(){
     m_renderer = SDL_CreateRenderer(m_window,-1,SDL_RENDERER_ACCELERATED);
     if(!m_renderer){ std::fprintf(stderr,"SDL_CreateRenderer failed: %s\n", SDL_GetError()); return false; }
     m_r2d = new Renderer2D(m_renderer);
-    Input::init();
+    
+    // Gamepad’i hazırla
+    Input::initGamepads();
 
     // World setup
    // if(!m_map.loadCSV("assets/level_aabb.csv")) std::fprintf(stderr,"[warn] assets/level_aabb.csv not found\n");
@@ -136,7 +138,8 @@ bool Application::init(){
 
 void Application::shutdown(){
     delete m_r2d; m_r2d=nullptr;
-    Input::shutdown();
+   
+    Input::shutdownGamepads();
     if(m_renderer){ SDL_DestroyRenderer(m_renderer); m_renderer=nullptr; }
     if(m_window){ SDL_DestroyWindow(m_window); m_window=nullptr; }
     IMG_Quit(); SDL_Quit();
@@ -144,13 +147,17 @@ void Application::shutdown(){
 
 void Application::processEvents(bool& running) {
     SDL_Event e;
+    Input::beginFrame();
     while (SDL_PollEvent(&e)) {
+        Input::handleEvent(e);
         if (e.type == SDL_QUIT) running = false;
     }
 
     if (Input::keyPressed(SDL_SCANCODE_ESCAPE)) running = false;
     if (Input::keyPressed(SDL_SCANCODE_I))      m_paused = !m_paused;
     if (Input::keyPressed(SDL_SCANCODE_F))      m_follow = !m_follow;
+    if (Input::padButtonPressed(SDL_CONTROLLER_BUTTON_START)) m_paused = !m_paused;
+
 
     if (Input::keyPressed(SDL_SCANCODE_R)) {
         m_player.x = m_spawnX;
@@ -179,13 +186,8 @@ void Application::processEvents(bool& running) {
         m_res.check(true);
     }
 
-    // Overlay toggle
-    if (Input::keyPressed(SDL_SCANCODE_F1)) {
-        m_dbgOverlay = !m_dbgOverlay;
-        std::fprintf(stderr, "[dbg] overlay = %s\n", m_dbgOverlay ? "ON" : "OFF");
-        notifyHUD(m_dbgOverlay ? "Debug ON" : "Debug OFF",
-            SDL_Color{ 70,130,200,255 }, 0.8f);
-    }
+    
+    
 
     // Space “bu framede basıldı” + yerde + S ile aşağı basmıyorken
     if (Input::keyPressed(SDL_SCANCODE_SPACE) && m_player.onGround && !Input::keyDown(SDL_SCANCODE_S)) {
@@ -229,7 +231,34 @@ void Application::update(double dt) {
         bool downHeld = Input::keyDown(SDL_SCANCODE_S) || Input::keyDown(SDL_SCANCODE_DOWN);
         bool dropRequest = downHeld && jumpPressed;
 
+        // ---- GAMEPAD KATKISI ----
+        float padX = Input::padAxisLX();
+        float padY = Input::padAxisLY();
 
+        // hareket: stick veya dpad
+        left = left || (padX < -0.25f) || Input::padButtonDown(SDL_CONTROLLER_BUTTON_DPAD_LEFT);
+        right = right || (padX > 0.25f) || Input::padButtonDown(SDL_CONTROLLER_BUTTON_DPAD_RIGHT);
+
+        // zıplama: A (veya Cross) tuşu
+        jumpPressed = jumpPressed || Input::padButtonPressed(SDL_CONTROLLER_BUTTON_A);
+        jumpHeld = jumpHeld || Input::padButtonDown(SDL_CONTROLLER_BUTTON_A);
+
+        // aşağı + zıplama ile drop-through: stick aşağı ya da dpad down + A
+        bool padDown = (padY > 0.45f) || Input::padButtonDown(SDL_CONTROLLER_BUTTON_DPAD_DOWN);
+        downHeld = downHeld || padDown;
+        dropRequest = dropRequest || (padDown && Input::padButtonPressed(SDL_CONTROLLER_BUTTON_A));
+
+        // Overlay toggle
+        // F1 / Pad Y — Debug Overlay
+        static bool prevDbg = m_dbgOverlay;
+        if (Input::keyPressed(SDL_SCANCODE_F1)) {
+            m_dbgOverlay = !m_dbgOverlay;
+        }
+        if (prevDbg != m_dbgOverlay) {
+            std::fprintf(stderr, "[dbg] overlay = %s\n", m_dbgOverlay ? "ON" : "OFF");
+            notifyHUD(m_dbgOverlay ? "DBG ON" : "DBG OFF", SDL_Color{ 180,180,180,255 }, 0.8f);
+            prevDbg = m_dbgOverlay;
+        }
 
         // Fizik çağrısı (YENİ imza!)
         integrate(m_player, m_map, m_pp, (float)dt, left, right, jumpPressed, jumpHeld, dropRequest);
@@ -421,8 +450,9 @@ void Application::update(double dt) {
             // çok küçük bir merkez pufu: “toz yükseliyor” hissi
             m_fx.emitFootDust(fx, fy, 1, +1.f);
             m_fx.emitFootDust(fx, fy, 1, -1.f);
-
+            Input::rumble(18000, 28000, (Uint32)(80 + 120 * impact)); // 80–200ms hafif rumble
         }
+
         m_fx.update((float)dt);
 
         m_wasGround = m_player.onGround;
@@ -705,12 +735,11 @@ int Application::run(){
     bool running=true;
     Uint64 f=SDL_GetPerformanceFrequency(), last=SDL_GetPerformanceCounter();
     while(running){
+        Input::beginFrame();
         Uint64 now=SDL_GetPerformanceCounter(); Uint64 diff=now-last; last=now;
         double dt=(double)diff/(double)f; if(dt>0.1) dt=0.1;
-        Input::beginFrame();
         SDL_PumpEvents();
         processEvents(running);
-        Input::endFrame();
         update(dt);
         render();
     }

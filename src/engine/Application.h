@@ -43,6 +43,7 @@ namespace Erlik {
         bool m_dbgShowBG = true;
         bool m_dbgShowFG = true;
         bool m_dbgShowCol = false; // collision heatmap
+        bool m_dbgOverlayPrev = false;   // sadece deðiþtiðinde logla
 
         struct Toast {
             std::string text;
