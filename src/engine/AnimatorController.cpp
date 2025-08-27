@@ -17,50 +17,51 @@ namespace Erlik {
         }
     }
 
-    void AnimatorController::change(AnimState s, bool forceRestart) {
-        if (!m_anim) return;
-        if (s == m_state && !forceRestart) return;
+    float AnimatorController::runSpeedFactor(float ax)
+    {
+        // Map velocity to fps for run clip (tune freely)
+        // 0 -> 6 fps, 100 -> 8 fps, 200 -> 10 fps, clamp 14 fps
+        float fps = 6.f + (ax / 100.f) * 2.f;
+        if (ax >= 200.f) fps = 10.f + (ax - 200.f) * 0.02f;
+        return std::clamp(fps, 6.f, 14.f);
+    }
+
+    void AnimatorController::change(AnimState s, bool forceRestart)
+    {
+        if (m_state == s && !forceRestart) return;
         m_prev = m_state;
         m_state = s;
         m_timeInState = 0.0;
 
-        switch (s) {
-        case AnimState::Idle: m_anim->play(m_idle, forceRestart); break;
-        case AnimState::Run:  m_anim->play(m_run, forceRestart); break;
-        case AnimState::Jump: m_anim->play(m_jump,  /*force*/true); break; // one-shot
-        case AnimState::Fall: m_anim->play(m_fall, forceRestart); break;
-        case AnimState::Land: m_anim->play(m_land,  /*force*/true); break;
+        if (!m_anim) return;
+        switch (m_state) {
+        case AnimState::Idle: m_anim->play(m_idle, forceRestart);  m_anim->setFPS(6.f);  break;
+        case AnimState::Run:  m_anim->play(m_run, forceRestart);   /* fps set per update */ break;
+        case AnimState::Jump: m_anim->play(m_jump, forceRestart);  m_anim->setFPS(12.f); break;
+        case AnimState::Fall: m_anim->play(m_fall, forceRestart);  m_anim->setFPS(10.f); break;
+        case AnimState::Land: m_anim->play(m_land, forceRestart);  m_anim->setFPS(12.f); break;
         }
     }
 
-    void AnimatorController::update(double dt, const AnimParams& p) {
+    void AnimatorController::update(const AnimParams& p, float dt)
+    {
         if (!m_anim) return;
         m_timeInState += dt;
 
-        // Eþikler
-        const float RUN_THRESH = 20.f;   // koþu eþiði (|vx|)
-        const float RUN_FPS_MIN = 4.f;    // koþu fps aralýðý
-        const float RUN_FPS_MAX = 16.f;
-        const float LAND_MIN_SEC = 0.12f;  // Land süresi
-
-        // Hýz tabanlý fps: 0..1 arasý
-        auto runSpeedFactor = [&](float vxAbs)->float {
-            // “koþu eþiði”ne ulaþýnca 1.0 sayalým (istersen m_pp.moveSpeed ile ölçekleyebilirsin)
-            float k = std::clamp(vxAbs / (RUN_THRESH * 2.f), 0.f, 1.f);
-            return RUN_FPS_MIN + (RUN_FPS_MAX - RUN_FPS_MIN) * k;
-        };
+        // Jump trigger takes priority
+        if (p.jumpTrigger) {
+            change(AnimState::Jump, true);
+            return;
+        }
 
         switch (m_state) {
         case AnimState::Idle:
         case AnimState::Run: {
             if (!p.onGround) {
-                change(AnimState::Fall);
-            }
-            else if (p.jumpTrigger) {
-                change(AnimState::Jump);
+                change((p.vy < 0.f) ? AnimState::Jump : AnimState::Fall, true);
             }
             else {
-                if (absf(p.vx) > RUN_THRESH) {
+                if (absf(p.vx) > 30.f) {
                     change(AnimState::Run);
                     m_anim->setFPS(runSpeedFactor(absf(p.vx)));
                 }
@@ -72,18 +73,19 @@ namespace Erlik {
         } break;
 
         case AnimState::Jump: {
-            // havaya çýktýysan ve artýk aþaðý dönüyorsan Fall
-            if (!p.onGround && p.vy > 0.f) change(AnimState::Fall);
-            else if (p.onGround)          change(AnimState::Land);
+            if (p.vy >= 0.f) change(AnimState::Fall, true);
         } break;
 
         case AnimState::Fall: {
-            if (p.onGround) change(AnimState::Land);
+            if (p.onGround) {
+                change(AnimState::Land, true);
+            }
         } break;
 
         case AnimState::Land: {
+            constexpr float LAND_MIN_SEC = 0.06f;
             if (m_timeInState >= LAND_MIN_SEC) {
-                if (absf(p.vx) > RUN_THRESH) {
+                if (absf(p.vx) > 30.f) {
                     change(AnimState::Run);
                     m_anim->setFPS(runSpeedFactor(absf(p.vx)));
                 }

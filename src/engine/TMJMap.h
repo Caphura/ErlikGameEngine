@@ -12,6 +12,7 @@ namespace Erlik {
         std::string name;       // obje adý (ops.)
         std::string target;     // properties.target (ops.)
         std::string message;    // properties.message (ops.)
+        std::string sfx;      // opsiyonel: bu trigger tetiklenince çalýnacak SFX adý
         bool        once = false; // properties.once
         float       x = 0, y = 0, w = 0, h = 0; // world-space rect (top-left + size)
         float       zoom = 0.0f;   // Region için kamera zoom deðeri

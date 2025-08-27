@@ -15,16 +15,14 @@ namespace Erlik {
             p.life += dt;
             if (p.life >= p.maxLife) { p.alive = false; continue; }
 
-            // hareket: her parçacýðýn kendi katsayýlarý
-            p.vy += (baseGravity * p.gravityScale) * dt;
-            p.vx -= p.vx * p.drag * dt;
+            // Integrate
+            p.vx *= std::max(0.f, 1.f - p.drag * dt);
+            p.vy += baseGravity * p.gravityScale * dt;
+
             p.x += p.vx * dt;
             p.y += p.vy * dt;
-
-            p.size = std::max(0.f, p.size - 20.f * dt);
         }
     }
-
 
     void ParticleSystem::draw(Renderer2D& r2d) const
     {
@@ -32,60 +30,39 @@ namespace Erlik {
             const auto& p = m_pool[i];
             if (!p.alive) continue;
 
-            float t = p.life / p.maxLife;          // 0..1
-            Uint8 a = Uint8(std::max(0.f, (1.f - t) * float(p.baseA)));
+            const float t = p.life / std::max(0.0001f, p.maxLife);
+            const Uint8 a = static_cast<Uint8>(std::clamp(1.f - t, 0.f, 1.f) * p.baseA);
 
-            SDL_Color c{ 220, 220, 200, a };
-            float s = std::max(1.f, p.size);
-            r2d.fillRect(p.x - s * 0.5f, p.y - s * 0.5f, s, s, c);
-        }
-    }
-
-    void ParticleSystem::emitDust(float x, float y, int count, float dir, float baseSpeed)
-    {
-        count = std::max(1, std::min(count, 32));
-        for (int n = 0; n < count; ++n) {
-            auto& p = m_pool[m_next];
-            m_next = (m_next + 1) % m_cap;
-
-            p.alive = true;
-            p.x = x + frand(-6.f, 6.f);
-            p.y = y + frand(-3.f, 2.f);
-            // daha bulutumsu: daha az hýz, daha fazla sürtünme, biraz daha iri
-            p.vx = (baseSpeed * frand(0.5f, 0.9f) + frand(-40.f, 40.f)) * dir;
-            p.vy = frand(-180.f, -90.f);
-            p.size = frand(6.f, 10.f);
-            p.life = 0.f;
-            p.maxLife = frand(0.40f, 0.70f);
-            p.baseA = 220;
-            p.gravityScale = 0.8f;   // daha yavaþ çöksün
-            p.drag = 5.5f;   // yatayda çabuk sönsün
-
+            SDL_Color col{ 180, 180, 180, a };
+            r2d.fillRect(p.x - p.size * 0.5f, p.y - p.size * 0.5f, p.size, p.size, col);
         }
     }
 
     void ParticleSystem::emitFootDust(float x, float y, int count, float dir)
     {
-        count = std::max(1, std::min(count, 12));
-        for (int n = 0; n < count; ++n) {
-            auto& p = m_pool[m_next];
+        emitDust(x, y, count, dir, 80.f);
+    }
+
+    void ParticleSystem::emitDust(float x, float y, int count, float dir, float baseSpeed)
+    {
+        dir = (dir >= 0.f) ? 1.f : -1.f;
+        for (int i = 0; i < count; ++i) {
+            Particle& p = m_pool[m_next];
             m_next = (m_next + 1) % m_cap;
 
             p.alive = true;
-            p.x = x + frand(-4.f, 4.f);
+            p.x = x + frand(-2.f, 2.f);
             p.y = y + frand(-2.f, 2.f);
-
-            // daha YAVAÞ ve GERÝYE doðru
-            p.vx = frand(20.f, 60.f) * dir;   // landing’e göre çok daha düþük
-            p.vy = frand(-60.f, -20.f);       // hafif yukarý, yavaþ
+            p.vx = dir * (baseSpeed + frand(-20.f, 20.f));
+            p.vy = frand(-60.f, -20.f);
 
             p.size = frand(4.f, 7.f);
             p.life = 0.f;
             p.maxLife = frand(0.28f, 0.48f);
 
-            // toz: daha çabuk yatýþsýn, az yerçekimi
-            p.gravityScale = 0.35f;           // landing 1.0 iken koþu 0.35
-            p.drag = 6.0f;            // yatayda çabuk dur
+            // dust: light, short-lived
+            p.gravityScale = 0.35f;
+            p.drag = 6.0f;
 
             p.baseA = 210;
         }

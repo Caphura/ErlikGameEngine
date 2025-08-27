@@ -29,9 +29,12 @@ void Renderer2D::drawTextureRegion(const Texture& tex, const SDL_Rect& src,
 
 void Renderer2D::fillRect(float x, float y, float w, float h, SDL_Color color)
 {
+    SDL_BlendMode prev;
+    SDL_GetRenderDrawBlendMode(m_r, &prev);
+    
     SDL_SetRenderDrawBlendMode(m_r, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(m_r, color.r, color.g, color.b, color.a);
-
+    
     SDL_FRect r{
         (x - m_cam.x) * m_cam.zoom,
         (y - m_cam.y) * m_cam.zoom,
@@ -40,8 +43,7 @@ void Renderer2D::fillRect(float x, float y, float w, float h, SDL_Color color)
     };
     SDL_RenderFillRectF(m_r, &r);
     m_drawCalls++;
-
-    SDL_SetRenderDrawBlendMode(m_r, SDL_BLENDMODE_NONE);
+    SDL_SetRenderDrawBlendMode(m_r, prev);
 }
 
 

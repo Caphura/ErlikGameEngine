@@ -1,6 +1,6 @@
 #include "Animator.h"
-#include <algorithm>  // std::clamp, std::min
-#include <cmath>      // std::floor
+#include <algorithm>
+#include <cmath>
 
 namespace Erlik {
 
@@ -16,47 +16,54 @@ namespace Erlik {
         m_clips[name] = Clip{ start, count, fps, loop };
     }
 
-    bool Animator::play(const std::string& name, bool forceRestart)
+    bool Animator::play(const std::string& name, bool restart)
     {
         auto it = m_clips.find(name);
         if (it == m_clips.end()) return false;
 
-        if (name != m_clipName || forceRestart) {
-            m_clipName = name;
-            m_clipStart = it->second.start;
-            m_clipCount = it->second.count;
-            m_clipLoop = it->second.loop;
-            setFPS(it->second.fps);
+        const Clip& c = it->second;
+        const bool changing = (m_clipName != name);
+        m_clipName = name;
+        m_clipStart = c.start;
+        m_clipCount = c.count;
+        m_clipLoop = c.loop;
+        m_fps = c.fps;
 
+        if (changing || restart) {
             m_time = 0.0;
             m_index = m_clipStart;
+        }
+        else {
+            // Keep index but clamp to the new clip range
+            m_index = std::clamp(m_index, m_clipStart, m_clipStart + m_clipCount - 1);
         }
         return true;
     }
 
-    int Animator::index() const { return m_index; }
-
-    float Animator::fps() const { return m_fps; }
-
-    void Animator::setFPS(float f)
+    void Animator::setIndex(int idx)
     {
-        // min ~0.016fps (1 frame / 60s) , max 120fps
-        m_fps = std::clamp(f, 1.0f / 60.0f, 120.0f);
+        if (m_totalFrames > 0) {
+            idx = std::clamp(idx, 0, m_totalFrames - 1);
+        }
+        m_index = idx;
     }
 
-    void Animator::update(double dt)
+    void Animator::update(float dt)
     {
-        if (m_fps <= 0.0f) return;
-
+        if (m_clipCount <= 0) return;
         m_time += dt;
-        const int frameAdvance = (int)std::floor(m_time * (double)m_fps);
 
-        if (m_clipCount <= 0) m_clipCount = 1;
+        const int frameAdvance = static_cast<int>(std::floor(m_time * m_fps));
+        if (frameAdvance <= 0) return;
 
-        int localIndex = 0;
+        // Consume the whole step (keeps remainder)
+        m_time -= static_cast<double>(frameAdvance) / static_cast<double>(m_fps);
+
+        int localIndex;
         if (m_clipLoop) {
-            const int ofs = (m_clipCount > 0) ? (frameAdvance % m_clipCount) : 0;
-            localIndex = m_clipStart + ofs;
+            const int ofs = frameAdvance % m_clipCount;
+            const int pos = (m_index - m_clipStart + ofs) % m_clipCount;
+            localIndex = m_clipStart + pos;
         }
         else {
             const int ofs = std::min(frameAdvance, m_clipCount - 1);
@@ -67,7 +74,6 @@ namespace Erlik {
             if (localIndex < 0) localIndex = 0;
             if (localIndex >= m_totalFrames) localIndex = m_totalFrames - 1;
         }
-
         m_index = localIndex;
     }
 

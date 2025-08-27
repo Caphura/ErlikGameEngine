@@ -11,7 +11,7 @@
 namespace Erlik {
 
     bool Application::init() {
-        if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_TIMER) != 0) {
+        if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_TIMER | SDL_INIT_AUDIO) != 0) {
             std::fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError()); return false;
         }
         int flags = IMG_INIT_PNG;
@@ -69,15 +69,13 @@ namespace Erlik {
         Audio::loadSfx("jump", "assets/audio/jump.wav");
         Audio::loadSfx("land", "assets/audio/land.wav");
         Audio::loadSfx("step", "assets/audio/step.wav");
-
+        // Kapı/teleport için bir efekt. Dosya ismini kendine göre ayarlayabilirsin:
+        Audio::loadSfx("door", "assets/audio/door.wav");   // ör: assets/audio/door.wav
         Audio::loadMusic("bgm", "assets/audio/level.ogg");
         Audio::playMusic("bgm", -1, 0.60f); // oyun açılır açılmaz çalsın
 
-        // renderer kurulumundan sonra:
-        if (!m_text.init(m_renderer, m_fontPath, 14)) {
-            std::fprintf(stderr, "[dbg] TTF load failed (%s) -> overlay text disabled\n", m_fontPath);
-        }
-
+       
+        // renderer kurulumundan sonra (TTF init): tek çağrı + fallback
         bool fontOK = m_text.init(m_renderer, m_fontPath, 14);
         if (!fontOK) {
             // Windows klasik fontu + muhtemel asset yollarını dene
@@ -149,7 +147,6 @@ namespace Erlik {
 
     void Application::processEvents(bool& running) {
         SDL_Event e;
-        Input::beginFrame();
         while (SDL_PollEvent(&e)) {
             Input::handleEvent(e);
             if (e.type == SDL_QUIT) running = false;
@@ -296,6 +293,11 @@ namespace Erlik {
                             m_player.y = ny;
                             m_player.vx = 0.f;
                             m_player.vy = 0.f;
+                            // Kapı SFX
+                            int ch = -1;
+                            if (!tr.sfx.empty()) ch = Audio::playSfx(tr.sfx);
+                            if (ch < 0)          ch = Audio::playSfx("door");
+                            if (ch < 0) { Audio::playSfx("step"); } // yedek: dosya yoksa sessiz kalmasın
                             SDL_Log("TRIGGER door: %s -> %s (teleport)", tr.name.c_str(), tr.target.c_str());
                             SDL_SetWindowTitle(m_window, (std::string("Door -> ") + tr.target).c_str());
                             pushToast("Door: " + tr.name + " -> " + tr.target, 1.8f);
@@ -339,8 +341,8 @@ namespace Erlik {
             ap.jumpTrigger = m_jumpTrigger;
 
             // ③ Controller + Animator update
-            m_animc.update(dt, ap);
-            m_anim.update(dt);
+            m_animc.update(ap, (float)dt);
+            m_anim.update((float)dt);
 
             // ④ Jump tetik bir-frame’liktir
             m_jumpTrigger = false;
@@ -635,6 +637,9 @@ namespace Erlik {
                 std::snprintf(title + len, sizeof(title) - len, " | %s", m_hudText);
             }
             SDL_SetWindowTitle(m_window, title);
+            // 30 framede bir güncelle
+            frames = 0;
+            accum = 0.0;
         }
 
         // üst şerit HUD banner

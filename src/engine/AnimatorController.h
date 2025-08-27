@@ -8,26 +8,23 @@ namespace Erlik {
 
     struct AnimParams {
         bool  onGround = false;
-        float vx = 0.f;       // yatay hýz (+sað)
-        float vy = 0.f;       // dikey hýz (+aþaðý)
-        bool  jumpTrigger = false;  // bu framede zýplama tetiklendi mi?
+        float vx = 0.f;        // +right
+        float vy = 0.f;        // +down
+        bool  jumpTrigger = false;
     };
 
     class AnimatorController {
     public:
-        void bind(Animator* a) { m_anim = a; }
-        void setClipNames(const std::string& idle,
-            const std::string& run,
-            const std::string& jump,
-            const std::string& fall,
+        void attach(Animator& anim) { m_anim = &anim; }
+        void bind(Animator* anim) { m_anim = anim; }
+        void setClipNames(const std::string& idle, const std::string& run,
+            const std::string& jump, const std::string& fall,
             const std::string& land)
         {
             m_idle = idle; m_run = run; m_jump = jump; m_fall = fall; m_land = land;
         }
 
-        void update(double dt, const AnimParams& p);
-
-        AnimState   state() const { return m_state; }
+        void update(const AnimParams& p, float dt);
         const char* stateName() const;
 
     private:
@@ -39,6 +36,7 @@ namespace Erlik {
         std::string m_idle = "idle", m_run = "run", m_jump = "jump", m_fall = "fall", m_land = "land";
 
         void change(AnimState s, bool forceRestart = false);
+        static float runSpeedFactor(float absVx);
     };
 
 } // namespace Erlik
