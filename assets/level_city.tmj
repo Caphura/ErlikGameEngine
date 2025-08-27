@@ -142,60 +142,6 @@
                  "y":864
                 }, 
                 {
-                 "height":160,
-                 "id":8,
-                 "name":"tr_sfx_jump_01",
-                 "properties":[
-                        {
-                         "name":"name",
-                         "type":"string",
-                         "value":"jump"
-                        }, 
-                        {
-                         "name":"vol",
-                         "type":"float",
-                         "value":0.6
-                        }],
-                 "rotation":0,
-                 "type":"sfx",
-                 "visible":true,
-                 "width":134,
-                 "x":1742,
-                 "y":1084
-                }, 
-                {
-                 "height":164,
-                 "id":9,
-                 "name":"tr_music_city_01",
-                 "properties":[
-                        {
-                         "name":"fade",
-                         "type":"float",
-                         "value":2
-                        }, 
-                        {
-                         "name":"name",
-                         "type":"string",
-                         "value":"bgm_city"
-                        }, 
-                        {
-                         "name":"op",
-                         "type":"string",
-                         "value":"play"
-                        }, 
-                        {
-                         "name":"vol",
-                         "type":"float",
-                         "value":1
-                        }],
-                 "rotation":0,
-                 "type":"music",
-                 "visible":true,
-                 "width":130,
-                 "x":1906,
-                 "y":1080
-                }, 
-                {
                  "height":128,
                  "id":10,
                  "name":"dA",
