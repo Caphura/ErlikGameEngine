@@ -123,6 +123,9 @@ namespace Erlik {
         float m_shakeDecay = 2.5f;  // s^-1
         float m_shakeAmp = 2.0f;  // px @ zoom=1
 
+        // Landing feedback (prev grounded state)
+        bool  m_prevOnGround = false;
+
         // --- Door FX (fade + teleport) ---
         bool  m_doorFxActive = false;
         int   m_doorFxPhase = 0;      // 0=idle, 1=fade-in, 2=fade-out

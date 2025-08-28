@@ -9,8 +9,68 @@
 #include "Audio.h"
 #include <unordered_set>
 #include <string>
+#include <filesystem>
+#include <fstream>
+#include <sstream>
+#include <cctype>
 
 namespace Erlik {
+
+    // ---- Checkpoint Save/Load Helpers ----
+    static std::string erlik_SaveFilePath() {
+        // Kullanıcıya özel güvenli bir yer: SDL_GetPrefPath
+            std::string dir;
+        char* pref = SDL_GetPrefPath("Erlik", "ErlikGame");
+        if (pref) { dir = pref; SDL_free(pref); }
+        else { dir = "saves/"; }
+        std::error_code ec;
+        std::filesystem::create_directories(dir, ec);
+        return dir + "checkpoint.json";
+        
+    }
+        static bool erlik_SaveCheckpoint(float x, float y, const std::string & mapPath) {
+        std::ofstream f(erlik_SaveFilePath(), std::ios::out | std::ios::trunc);
+        if (!f) return false;
+        f << "{\n"
+          << "  \"x\": " << x << ",\n"
+          << "  \"y\": " << y << ",\n"
+          << "  \"map\": \"" << mapPath << "\"\n"
+          << "}\n";
+        return true;
+
+    }
+
+        static bool erlik_LoadCheckpoint(float& x, float& y, std::string & mapPath) {
+        std::ifstream f(erlik_SaveFilePath(), std::ios::in);
+        if (!f) return false;
+        std::string s((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+        auto findNum = [&](const char* key, float& out)->bool {
+            size_t p = s.find(std::string("\"") + key + "\"");
+            if (p == std::string::npos) return false;
+            p = s.find(':', p); if (p == std::string::npos) return false;
+            size_t q = s.find_first_of("-0123456789.", p + 1);
+            if (q == std::string::npos) return false;
+            size_t r = q;
+            while (r < s.size() && (std::isdigit((unsigned char)s[r]) || s[r] == '-' || s[r] == '.')) ++r;
+            try { out = std::stof(s.substr(q, r - q)); }
+            catch (...) { return false; }
+            return true;
+            };
+        auto findStr = [&](const char* key, std::string& out)->bool {
+            size_t p = s.find(std::string("\"") + key + "\"");
+            if (p == std::string::npos) return false;
+            p = s.find(':', p); if (p == std::string::npos) return false;
+            p = s.find('\"', p); if (p == std::string::npos) return false;
+            size_t q = s.find('\"', p + 1); if (q == std::string::npos) return false;
+            out = s.substr(p + 1, q - (p + 1)); return true;
+            };
+        float lx = 0, ly = 0; std::string lm;
+        if (!findNum("x", lx) || !findNum("y", ly)) return false;
+        findStr("map", lm);
+        x = lx; y = ly; mapPath = lm;
+        return true;
+        
+    }
 
     bool Application::init() {
         if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_TIMER | SDL_INIT_AUDIO) != 0) {
@@ -165,6 +225,18 @@ namespace Erlik {
         m_spawnX = m_player.x;
         m_spawnY = m_player.y;
 
+        // Diskten checkpoint yükle (varsa oradan başla)
+        {
+            float sx = 0.f, sy = 0.f; std::string smap;
+            if (erlik_LoadCheckpoint(sx, sy, smap)) {
+                m_spawnX = sx; m_spawnY = sy;
+                m_player.x = sx; m_player.y = sy;
+                SDL_Log("[save] Loaded checkpoint: (%.1f, %.1f) map=%s", sx, sy, smap.c_str());
+                pushToast("Loaded checkpoint", 1.2f);
+               
+            }
+         }
+
         // Visual sprite / anim clips
         if (m_atlas.loadGrid(m_renderer, "assets/atlas8x1.png", 32, 32, 0, 0)) {
             int total = m_atlas.frameCount();
@@ -290,6 +362,16 @@ namespace Erlik {
             downHeld = downHeld || padDown;
             dropRequest = dropRequest || (padDown && Input::padButtonPressed(SDL_CONTROLLER_BUTTON_A));
 
+            // --- Respawn to last checkpoint (F9) ---
+            if (Input::keyPressed(SDL_SCANCODE_F9)) {
+                m_player.x = m_spawnX; m_player.y = m_spawnY;
+                m_player.vx = 0.f;     m_player.vy = 0.f;
+                int ch = Audio::playSfx("door"); if (ch < 0) Audio::playSfx("step");
+                Input::rumble(12000, 22000, 90);
+                pushToast("Respawn", 0.8f);
+                
+            }
+
             // --- ORTAK ZIPLAMA TETİK + SFX ---
             if (jumpPressed && m_player.onGround && !downHeld) {
                 m_jumpTrigger = true;
@@ -337,6 +419,12 @@ namespace Erlik {
                         SDL_Log("TRIGGER checkpoint: id=%d name=%s", tr.id, tr.name.c_str());
                         SDL_SetWindowTitle(m_window, "Checkpoint!");
                         pushToast("Checkpoint!", 1.6f);
+                        // Diske kaydet
+                        if (!erlik_SaveCheckpoint(m_spawnX, m_spawnY, m_tmjPath))
+                            SDL_Log("[save] WARNING: could not write checkpoint file");
+                        else
+                            SDL_Log("[save] checkpoint saved to %s", erlik_SaveFilePath().c_str());
+                            Input::rumble(12000, 22000, 500);
                     }
                     else if (tr.type == "door") {
                         const auto * dst = m_tmj.findTriggerByName(tr.target);
@@ -434,6 +522,20 @@ namespace Erlik {
             // ① Yüz yönünü güncelle (anim flip için)
             if (std::fabs(m_player.vx) > 1.f) {
                 m_faceRight = (m_player.vx >= 0.f);
+            }
+
+            // --- Landing feedback (first frame on ground) ---
+            {
+                const bool landingNow = (!m_prevOnGround && m_player.onGround);
+                if (landingNow) {
+                // SFX: 'land' varsa çal, yoksa 'step' ile yedekle
+                    int ch = Audio::playSfx("land");
+                    if (ch < 0) Audio::playSfx("step");
+                    // Kısa kamera sarsıntısı ve rumble
+                    m_shake = std::min(1.0f, m_shake + 0.25f);
+                    Input::rumble(12000, 22000, 70); // low, high, ms
+                }
+                m_prevOnGround = m_player.onGround;
             }
 
             // ② Animator Controller parametreleri
