@@ -185,6 +185,11 @@ namespace Erlik {
                     t.target = json_str_or(O, "target", "");
                     t.message = json_str_or(O, "message", "");
                     t.zoom = json_float_or(O, "zoom", 0.0f);
+                    // door props (opsiyonel)
+                    t.sfx = json_str_or(O, "sfx", "");
+                    t.fadeInMs = json_float_or(O, "fadeInMs", 0.0f);
+                    t.fadeOutMs = json_float_or(O, "fadeOutMs", 0.0f);
+                    t.shake = json_float_or(O, "shake", 0.0f);
                     // music region props (opsiyonel)
                     t.music = json_str_or(O, "music", "");
                     t.exitMusic = json_str_or(O, "exitMusic", "");

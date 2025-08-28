@@ -123,6 +123,20 @@ namespace Erlik {
         float m_shakeDecay = 2.5f;  // s^-1
         float m_shakeAmp = 2.0f;  // px @ zoom=1
 
+        // Landing feedback (prev grounded state)
+        bool  m_prevOnGround = false;
+
+        // --- Door FX (fade + teleport) ---
+        bool  m_doorFxActive = false;
+        int   m_doorFxPhase = 0;      // 0=idle, 1=fade-in, 2=fade-out
+        float m_doorFxT = 0.f;    // current phase timer (sec)
+        float m_doorFadeIn = 0.12f;  // sec
+        float m_doorFadeOut = 0.14f;  // sec
+        float m_doorAlpha = 0.f;    // 0..1 (render overlay)
+        bool  m_doorTeleportPending = false;
+        float m_doorTeleportY = 0.f;
+        float m_doorTeleportX = 0.f;
+
         // Run foot dust (timer-based)
         float m_runDustTimer = 0.0f;   // geri sayým
         float m_runDustMinSpd = 35.0f; // tetik eþiði (px/s)
