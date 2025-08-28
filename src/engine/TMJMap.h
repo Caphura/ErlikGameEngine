@@ -12,10 +12,14 @@ namespace Erlik {
         std::string name;       // obje adý (ops.)
         std::string target;     // properties.target (ops.)
         std::string message;    // properties.message (ops.)
-        std::string sfx;      // opsiyonel: bu trigger tetiklenince çalýnacak SFX adý
         bool        once = false; // properties.once
         float       x = 0, y = 0, w = 0, h = 0; // world-space rect (top-left + size)
         float       zoom = 0.0f;   // Region için kamera zoom deðeri
+        // Door-specific (opsiyonel)
+        std::string sfx;       // çalýnacak sfx adý
+        float       fadeInMs = 0.f;   // ms
+        float       fadeOutMs = 0.f;   // ms
+        float       shake = 0.f;   // 0..1
         // --- Music Region (opsiyonel) ---
         std::string music;       // enter: çalýnacak müzik adý (Audio::loadMusic ile yüklenmiþ)
         std::string exitMusic;   // exit: boþ deðilse buna dön (boþsa önceki müziðe döner)

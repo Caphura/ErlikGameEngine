@@ -339,26 +339,34 @@ namespace Erlik {
                         pushToast("Checkpoint!", 1.6f);
                     }
                     else if (tr.type == "door") {
-                        const auto* dst = m_tmj.findTriggerByName(tr.target);
+                        const auto * dst = m_tmj.findTriggerByName(tr.target);
                         if (dst) {
-                            float nx = dst->x + dst->w * 0.5f;
-                            float ny = dst->y + dst->h * 0.5f;
-                            m_player.x = nx;
-                            m_player.y = ny;
-                            m_player.vx = 0.f;
-                            m_player.vy = 0.f;
-                            // Kapı SFX
-                            int ch = -1;
+                            // Hedefi kaydet, fade-in bitiminde teleport et
+                            m_doorTeleportX = dst->x + dst->w * 0.5f;
+                            m_doorTeleportY = dst->y + dst->h * 0.5f;
+                            m_doorTeleportPending = true;
+                            
+                                // Kapı SFX (trigger sfx > "door" > "step")
+                                int ch = -1;
                             if (!tr.sfx.empty()) ch = Audio::playSfx(tr.sfx);
                             if (ch < 0)          ch = Audio::playSfx("door");
-                            if (ch < 0) { Audio::playSfx("step"); } // yedek: dosya yoksa sessiz kalmasın
-                            SDL_Log("TRIGGER door: %s -> %s (teleport)", tr.name.c_str(), tr.target.c_str());
-                            SDL_SetWindowTitle(m_window, (std::string("Door -> ") + tr.target).c_str());
-                            pushToast("Door: " + tr.name + " -> " + tr.target, 1.8f);
+                            if (ch < 0)          ch = Audio::playSfx("step");
+                            
+                                // Rumble + Shake
+                            float shakeK = (tr.shake > 0.f) ? std::clamp(tr.shake, 0.f, 1.f) : 0.5f;
+                            m_shake = std::min(1.0f, m_shake + shakeK);
+                            Input::rumble(14000, 26000, (Uint32)(80 + 60 * shakeK));
+                            
+                                // Fade parametreleri (ms -> sn)
+                            m_doorFadeIn = (tr.fadeInMs > 0.f ? tr.fadeInMs : 120.f) / 1000.f;
+                            m_doorFadeOut = (tr.fadeOutMs > 0.f ? tr.fadeOutMs : 140.f) / 1000.f;
+                            m_doorFxActive = true; m_doorFxPhase = 1; m_doorFxT = 0.f; m_doorAlpha = 0.f;
+                            
+                                SDL_Log("TRIGGER door: %s -> %s (fade in/out, shake=%.2f)", tr.name.c_str(), tr.target.c_str(), shakeK);
+                            pushToast("Door: " + tr.name + " -> " + tr.target, 1.2f);
 
                             m_shake = std::min(1.0f, m_shake + 0.35f);
-                        }
-                        else {
+                        } else {
                             SDL_Log("WARN: door target not found: %s", tr.target.c_str());
                         }
                     }
@@ -587,6 +595,43 @@ namespace Erlik {
             m_cam.y += (jy * m_shakeAmp) / m_cam.zoom;
             m_shake = std::max(0.f, m_shake - m_shakeDecay * (float)dt);
         }
+        // --- Door FX (fade + teleport) ---
+        if (m_doorFxActive) {
+            if (m_doorFxPhase == 1) { // fade-in
+                m_doorFxT += (float)dt;
+                float u = std::clamp(m_doorFxT / std::max(0.001f, m_doorFadeIn), 0.f, 1.f);
+                // ease-in (yumuşak), istersen linear kullan: m_doorAlpha = u;
+                    m_doorAlpha = u * u;
+                if (u >= 1.f) {
+                    if (m_doorTeleportPending) {
+                        m_player.x = m_doorTeleportX;
+                        m_player.y = m_doorTeleportY;
+                        m_player.vx = 0.f; m_player.vy = 0.f;
+                        m_doorTeleportPending = false;
+
+                    }
+                    m_doorFxPhase = 2;
+                    m_doorFxT = 0.f;
+
+                }
+
+            }
+            else if (m_doorFxPhase == 2) { // fade-out
+                m_doorFxT += (float)dt;
+                float u = std::clamp(m_doorFxT / std::max(0.001f, m_doorFadeOut), 0.f, 1.f);
+                // ease-out
+                    m_doorAlpha = 1.f - (1.f - u) * (1.f - u);
+                m_doorAlpha = 1.f - m_doorAlpha; // yukarıdaki ease-out ile 1->0 inelim
+                if (u >= 1.f) {
+                    m_doorFxActive = false;
+                    m_doorFxPhase = 0;
+                    m_doorAlpha = 0.f;
+
+                }
+
+            }
+
+        }
 
         m_time += dt;
     }
@@ -757,6 +802,19 @@ namespace Erlik {
             SDL_RenderFillRectF(m_renderer, &bar);
 
             SDL_SetRenderDrawBlendMode(m_renderer, SDL_BLENDMODE_NONE);
+        }
+        // --- Door Fade Overlay (ekran üstü) ---
+        if (m_doorFxActive && m_doorAlpha > 0.f) {
+            int vw, vh; m_r2d->outputSize(vw, vh);
+            SDL_BlendMode prev;
+            SDL_GetRenderDrawBlendMode(m_renderer, &prev);
+            SDL_SetRenderDrawBlendMode(m_renderer, SDL_BLENDMODE_BLEND);
+            Uint8 a = (Uint8)std::clamp(m_doorAlpha * 255.f, 0.f, 255.f);
+            SDL_SetRenderDrawColor(m_renderer, 0, 0, 0, a);
+            SDL_FRect full{ 0.f, 0.f, (float)vw, (float)vh };
+            SDL_RenderFillRectF(m_renderer, &full);
+            SDL_SetRenderDrawBlendMode(m_renderer, prev);
+            
         }
 
         m_r2d->present();
