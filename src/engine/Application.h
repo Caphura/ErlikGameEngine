@@ -131,7 +131,10 @@ namespace Erlik {
         std::unordered_set<int> m_triggersFired; // once=true olanlar için
         float m_spawnX = 0.f, m_spawnY = 0.f;    // checkpoint noktasý
 
-
+        // Music region state
+        int         m_activeMusicRegionId = -1;
+        std::string m_musicCurrent;      // þu an çalan (biz takip ediyoruz)
+        std::string m_musicBeforeRegion; // region’a girmeden önce çalan
 
 
     };

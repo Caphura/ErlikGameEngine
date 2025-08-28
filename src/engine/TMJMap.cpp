@@ -185,6 +185,11 @@ namespace Erlik {
                     t.target = json_str_or(O, "target", "");
                     t.message = json_str_or(O, "message", "");
                     t.zoom = json_float_or(O, "zoom", 0.0f);
+                    // music region props (opsiyonel)
+                    t.music = json_str_or(O, "music", "");
+                    t.exitMusic = json_str_or(O, "exitMusic", "");
+                    t.musicVol = json_float_or(O, "musicVol", 1.0f);
+                    t.musicFadeMs = (int)json_float_or(O, "musicFadeMs", 0.0f);
 
                     if (!t.type.empty() && t.w > 0 && t.h > 0)
                         m_triggers.push_back(std::move(t));

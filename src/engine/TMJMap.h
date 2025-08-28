@@ -16,6 +16,11 @@ namespace Erlik {
         bool        once = false; // properties.once
         float       x = 0, y = 0, w = 0, h = 0; // world-space rect (top-left + size)
         float       zoom = 0.0f;   // Region için kamera zoom deðeri
+        // --- Music Region (opsiyonel) ---
+        std::string music;       // enter: çalýnacak müzik adý (Audio::loadMusic ile yüklenmiþ)
+        std::string exitMusic;   // exit: boþ deðilse buna dön (boþsa önceki müziðe döner)
+        float       musicVol = 1.0f;   // 0..1
+        int         musicFadeMs = 0;   // enter/exit geçiþlerinde fade süresi (ms)
     };
 
     class TMJMap {

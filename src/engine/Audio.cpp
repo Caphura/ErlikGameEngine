@@ -23,7 +23,7 @@ namespace Erlik {
             if ((got & want) != want) {
                 SDL_Log("[audio] Mix_Init warn: %s", Mix_GetError()); // mp3/ogg yoksa sadece uyar
             }
-            if (Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 1024) != 0) {
+            if (Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 2048) != 0) {
                 SDL_Log("[audio] Mix_OpenAudio failed: %s", Mix_GetError());
                 return false;
             }
@@ -60,6 +60,11 @@ namespace Erlik {
             return true;
         }
 
+        bool hasMusic(const std::string& name) {
+            return g_music.find(name) != g_music.end();
+            
+        }
+
         int playSfx(const std::string& name, int loops, int channel, int volume) {
             auto it = g_sfx.find(name);
             if (it == g_sfx.end()) { SDL_Log("[audio] SFX not found '%s'", name.c_str()); return -1; }
@@ -75,6 +80,17 @@ namespace Erlik {
 
             if (Mix_PlayMusic(it->second, loops) != 0) {
                 SDL_Log("[audio] PlayMusic failed: %s", Mix_GetError());
+                return false;
+            }
+            return true;
+        }
+
+        bool playMusicFade(const std::string& name, int loops, int fadeMs, float volume) {
+            auto it = g_music.find(name);
+            if (it == g_music.end()) { SDL_Log("[audio] Music not found '%s'", name.c_str()); return false; }
+            Mix_VolumeMusic((int)(std::clamp(volume, 0.0f, 1.0f) * MIX_MAX_VOLUME));
+            if (Mix_FadeInMusic(it->second, loops, std::max(0, fadeMs)) != 0) {
+                SDL_Log("[audio] FadeInMusic failed: %s", Mix_GetError());
                 return false;
             }
             return true;

@@ -7,6 +7,8 @@
 #include <cstring>    // std::strlen, std::strncpy
 #include <algorithm>  // std::clamp, std::min, std::max
 #include "Audio.h"
+#include <unordered_set>
+#include <string>
 
 namespace Erlik {
 
@@ -41,6 +43,23 @@ namespace Erlik {
             m_worldW = static_cast<float>(m_tmj.cols() * m_tmj.tileW());
             m_worldH = static_cast<float>(m_tmj.rows() * m_tmj.tileH());
 
+            {
+                std::unordered_set<std::string> names;
+                for (const auto& tr : m_tmj.triggers()) {
+                    if (!tr.music.empty())     names.insert(tr.music);
+                    if (!tr.exitMusic.empty()) names.insert(tr.exitMusic);
+
+                }
+                for (const auto& nm : names) {
+                    if (!Audio::hasMusic(nm)) {
+                        // Konvansiyon: assets/audio/<name>.ogg
+                        std::string path = "assets/audio/" + nm + ".ogg";
+                        Audio::loadMusic(nm, path);
+                        SDL_Log("[preload] music: %s (%s)", nm.c_str(), path.c_str());
+                    }
+                }
+            }
+
             // --- Hot Reload: TMJ dosyasını izle
             m_res.track(m_tmjPath, [this]() {
                 if (m_tmj.load(m_renderer, m_tmjPath)) {
@@ -49,7 +68,40 @@ namespace Erlik {
                     m_worldW = static_cast<float>(m_tmj.cols() * m_tmj.tileW());
                     m_worldH = static_cast<float>(m_tmj.rows() * m_tmj.tileH());
 
+                    // --- PRELOAD: Region trigger'larında referans verilen müzikleri baştan yükle ---
+                    {
+                        std::unordered_set<std::string> names;
+                        for (const auto& tr : m_tmj.triggers()) {
+                            if (!tr.music.empty())     names.insert(tr.music);
+                            if (!tr.exitMusic.empty()) names.insert(tr.exitMusic);
+                            
+                        }
+                        for (const auto& nm : names) {
+                            if (!Audio::hasMusic(nm)) {
+                            // Konvansiyon: assets/audio/<name>.ogg
+                                    std::string path = "assets/audio/" + nm + ".ogg";
+                                Audio::loadMusic(nm, path);
+                                SDL_Log("[preload] music: %s (%s)", nm.c_str(), path.c_str());
+                            }
+                        }
+                    }
                     notifyHUD("Reload OK (TMJ)", SDL_Color{ 40,200, 90,255 }, 1.5f);
+
+                    // Region müziklerini tekrar preload et (yeni/degisen olabilir)
+                    {
+                        std::unordered_set<std::string> names;
+                        for (const auto& tr : m_tmj.triggers()) {
+                            if (!tr.music.empty())     names.insert(tr.music);
+                            if (!tr.exitMusic.empty()) names.insert(tr.exitMusic);
+                        }
+                        for (const auto& nm : names) {
+                            if (!Audio::hasMusic(nm)) {
+                                std::string path = "assets/audio/" + nm + ".ogg";
+                                Audio::loadMusic(nm, path);
+                                SDL_Log("[preload] music (reload): %s (%s)", nm.c_str(), path.c_str());
+                            }
+                        }
+                    }
                 }
                 else {
                     std::fprintf(stderr, "[hotreload] TMJ reload FAILED: %s\n", m_tmjPath.c_str());
@@ -72,7 +124,9 @@ namespace Erlik {
         // Kapı/teleport için bir efekt. Dosya ismini kendine göre ayarlayabilirsin:
         Audio::loadSfx("door", "assets/audio/door.wav");   // ör: assets/audio/door.wav
         Audio::loadMusic("bgm", "assets/audio/level.ogg");
+        Audio::loadMusic("bgm_forest", "assets/audio/forest.ogg");
         Audio::playMusic("bgm", -1, 0.60f); // oyun açılır açılmaz çalsın
+        m_musicCurrent = "bgm";
 
        
         // renderer kurulumundan sonra (TTF init): tek çağrı + fallback
@@ -311,14 +365,55 @@ namespace Erlik {
                     else { // "region" ve diğer custom türler
                         if (!tr.message.empty()) {
                             pushToast(tr.message, 2.2f);
+                            
                         }
                         if (tr.zoom > 0.0f) {
                             m_cam.zoom = std::clamp(tr.zoom, 0.25f, 3.0f);
+                        }
+                        // --- Music region: ENTER ---
+                            if (!tr.music.empty()) {
+                            // Yalnızca değişiyorsa çal
+                                if (tr.music != m_musicCurrent) {
+                                m_musicBeforeRegion = m_musicCurrent;
+                                const float vol = std::clamp(tr.musicVol, 0.0f, 1.0f);
+                                if (tr.musicFadeMs > 0)
+                                    Audio::playMusicFade(tr.music, -1, tr.musicFadeMs, vol);
+                                else
+                                    Audio::playMusic(tr.music, -1, vol);
+                                m_musicCurrent = tr.music;
+                            }
+                            m_activeMusicRegionId = tr.id;
+                            SDL_Log("MUSIC ENTER region=%s music=%s vol=%.2f fadeMs=%d",
+                                tr.name.c_str(), tr.music.c_str(), tr.musicVol, tr.musicFadeMs);
                         }
                         SDL_Log("TRIGGER %s: name=%s zoom=%.2f", tr.type.c_str(), tr.name.c_str(), tr.zoom);
                     }
 
                     if (tr.once) m_triggersFired.insert(tr.id);
+                }
+                else if (!now && prev) {
+                    // === EXIT ===
+                        if (tr.type == "region") {
+                        // yalnızca aktif müzik bölgesinden çıkıyorsak geri dön
+                            if (tr.id == m_activeMusicRegionId) {
+                            std::string next = !tr.exitMusic.empty() ? tr.exitMusic : m_musicBeforeRegion;
+                            if (!next.empty() && next != m_musicCurrent) {
+                                if (tr.musicFadeMs > 0)
+                                    Audio::playMusicFade(next, -1, tr.musicFadeMs, 1.0f);
+                                else
+                                    Audio::playMusic(next, -1, 1.0f);
+                                m_musicCurrent = next;
+                            }
+                            else if (next.empty()) {
+                                // hiçbiri yoksa durdur
+                                    if (tr.musicFadeMs > 0) Audio::stopMusic(tr.musicFadeMs);
+                                else                     Audio::stopMusic(0);
+                                m_musicCurrent.clear();
+                            }
+                            m_activeMusicRegionId = -1;
+                            SDL_Log("MUSIC EXIT region=%s -> next=%s", tr.name.c_str(), m_musicCurrent.c_str());
+                        }
+                    }
                 }
             }
 
