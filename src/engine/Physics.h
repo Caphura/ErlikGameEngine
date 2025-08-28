@@ -11,6 +11,8 @@ struct Player {
     float prevX = 0.f, prevY = 0.f;
     float dropTimer = 0.f;        // one-way'i geçici olarak yok saymak için
     float coyoteTimer = 0.f, jumpBufferTimer = 0.f;
+    bool jumpWasHeld = false; // önceki frame durumu
+
 
 };
 
@@ -32,10 +34,10 @@ struct PhysicsParams {
     float groundSnapDist = 3.0f;
     int   stepMaxPixels = 8;
 
-    // YENİ: sürtünme ve kısa zıplama
+    // Sürtünme
     float frictionGround = 20.f; // px/s sürtünme katsayısı
-    float frictionAir = 1.f; // havada hafif sönüm
-    float jumpCutFactor = 0.5f; // tuş bırakılınca yukarı hızla çarp (0.5 = %50)
+    float frictionAir = 1.f;     // havada hafif sönüm
+    
 };
 
 // İMZA: jumpPressed + jumpHeld ++ dropRequest
