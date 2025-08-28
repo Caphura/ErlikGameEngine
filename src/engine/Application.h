@@ -144,6 +144,7 @@ namespace Erlik {
         // Trigger state
         std::unordered_set<int> m_triggersFired; // once=true olanlar için
         float m_spawnX = 0.f, m_spawnY = 0.f;    // checkpoint noktasý
+        int   m_saveSlot = 1;                    // aktif kayýt slotu (1..3)
 
         // Music region state
         int         m_activeMusicRegionId = -1;

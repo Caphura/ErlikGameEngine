@@ -17,31 +17,35 @@
 namespace Erlik {
 
     // ---- Checkpoint Save/Load Helpers ----
-    static std::string erlik_SaveFilePath() {
+    static std::string erlik_SaveFilePathForSlot(int slot) {
         // Kullanıcıya özel güvenli bir yer: SDL_GetPrefPath
-            std::string dir;
+        std::string dir;
         char* pref = SDL_GetPrefPath("Erlik", "ErlikGame");
         if (pref) { dir = pref; SDL_free(pref); }
         else { dir = "saves/"; }
         std::error_code ec;
         std::filesystem::create_directories(dir, ec);
-        return dir + "checkpoint.json";
+        if (slot < 1) slot = 1; if (slot > 3) slot = 3;
+        return dir + "checkpoint_slot" + std::to_string(slot) + ".json";
         
     }
-        static bool erlik_SaveCheckpoint(float x, float y, const std::string & mapPath) {
-        std::ofstream f(erlik_SaveFilePath(), std::ios::out | std::ios::trunc);
+        // Geriye uyum: slot=1
+        
+        static bool erlik_SaveCheckpointSlot(int slot, float x, float y, const std::string& mapPath) {
+        std::ofstream f(erlik_SaveFilePathForSlot(slot), std::ios::out | std::ios::trunc);
         if (!f) return false;
         f << "{\n"
-          << "  \"x\": " << x << ",\n"
-          << "  \"y\": " << y << ",\n"
-          << "  \"map\": \"" << mapPath << "\"\n"
-          << "}\n";
+            << "  \"x\": " << x << ",\n"
+            << "  \"y\": " << y << ",\n"
+            << "  \"map\": \"" << mapPath << "\"\n"
+            << "}\n";
         return true;
 
-    }
+        }
+        
 
-        static bool erlik_LoadCheckpoint(float& x, float& y, std::string & mapPath) {
-        std::ifstream f(erlik_SaveFilePath(), std::ios::in);
+        static bool erlik_LoadCheckpointSlot(int slot, float& x, float& y, std::string& mapPath) {
+        std::ifstream f(erlik_SaveFilePathForSlot(slot), std::ios::in);
         if (!f) return false;
         std::string s((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
         auto findNum = [&](const char* key, float& out)->bool {
@@ -70,7 +74,8 @@ namespace Erlik {
         x = lx; y = ly; mapPath = lm;
         return true;
         
-    }
+        }
+        
 
     bool Application::init() {
         if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_TIMER | SDL_INIT_AUDIO) != 0) {
@@ -225,14 +230,14 @@ namespace Erlik {
         m_spawnX = m_player.x;
         m_spawnY = m_player.y;
 
-        // Diskten checkpoint yükle (varsa oradan başla)
+        // Diskten checkpoint yükle (aktif slottan; varsa oradan başla)
         {
             float sx = 0.f, sy = 0.f; std::string smap;
-            if (erlik_LoadCheckpoint(sx, sy, smap)) {
+            if (erlik_LoadCheckpointSlot(m_saveSlot, sx, sy, smap)) {
                 m_spawnX = sx; m_spawnY = sy;
                 m_player.x = sx; m_player.y = sy;
-                SDL_Log("[save] Loaded checkpoint: (%.1f, %.1f) map=%s", sx, sy, smap.c_str());
-                pushToast("Loaded checkpoint", 1.2f);
+                SDL_Log("[save] Loaded slot %d: (%.1f, %.1f) map=%s", m_saveSlot, sx, sy, smap.c_str());
+                pushToast("Loaded checkpoint (slot " + std::to_string(m_saveSlot) + ")", 1.2f);
                
             }
          }
@@ -303,7 +308,7 @@ namespace Erlik {
         if (Input::keyPressed(SDL_SCANCODE_X)) { m_cam.zoom *= 1.25f; if (m_cam.zoom > 3.0f) m_cam.zoom = 3.0f; }
 
         // Hot reload
-        if (Input::keyPressed(SDL_SCANCODE_F5)) {
+        if (Input::keyPressed(SDL_SCANCODE_F10)) {
             std::fprintf(stderr, "[hotreload] manual check\n");
             notifyHUD("Reload CHECK…", SDL_Color{ 70,130,200,255 }, 0.6f);
             m_res.check(true);
@@ -372,6 +377,41 @@ namespace Erlik {
                 
             }
 
+            // --- Save Slot select (F2/F3/F4) ---
+            if (Input::keyPressed(SDL_SCANCODE_F2)) { m_saveSlot = 1; pushToast("Slot 1", 0.6f); }
+            if (Input::keyPressed(SDL_SCANCODE_F3)) { m_saveSlot = 2; pushToast("Slot 2", 0.6f); }
+            if (Input::keyPressed(SDL_SCANCODE_F4)) { m_saveSlot = 3; pushToast("Slot 3", 0.6f); }
+
+            // --- SAVE (F5) ---
+            if (Input::keyPressed(SDL_SCANCODE_F5)) {
+                if (erlik_SaveCheckpointSlot(m_saveSlot, m_player.x, m_player.y, m_tmjPath)) {
+                    SDL_Log("[save] manual save -> %s", erlik_SaveFilePathForSlot(m_saveSlot).c_str());
+                    pushToast("Saved (slot " + std::to_string(m_saveSlot) + ")", 0.9f);
+                    int ch = Audio::playSfx("door"); if (ch < 0) Audio::playSfx("step");
+                    Input::rumble(14000, 24000, 100);
+                }
+                else {
+                    pushToast("Save FAILED", 1.0f);
+                }
+            }
+
+            // --- LOAD (F6) ---
+            if (Input::keyPressed(SDL_SCANCODE_F6)) {
+                float sx = 0.f, sy = 0.f; std::string smap;
+                if (erlik_LoadCheckpointSlot(m_saveSlot, sx, sy, smap)) {
+                    m_spawnX = sx; m_spawnY = sy;
+                    m_player.x = sx; m_player.y = sy;
+                    m_player.vx = 0.f; m_player.vy = 0.f;
+                    SDL_Log("[save] loaded (slot %d): (%.1f, %.1f) map=%s", m_saveSlot, sx, sy, smap.c_str());
+                    pushToast("Loaded (slot " + std::to_string(m_saveSlot) + ")", 0.9f);
+                    int ch = Audio::playSfx("door"); if (ch < 0) Audio::playSfx("step");
+                    Input::rumble(12000, 22000, 90);
+                }
+                else {
+                    pushToast("Load FAILED", 1.0f);
+                }
+            }
+
             // --- ORTAK ZIPLAMA TETİK + SFX ---
             if (jumpPressed && m_player.onGround && !downHeld) {
                 m_jumpTrigger = true;
@@ -419,12 +459,19 @@ namespace Erlik {
                         SDL_Log("TRIGGER checkpoint: id=%d name=%s", tr.id, tr.name.c_str());
                         SDL_SetWindowTitle(m_window, "Checkpoint!");
                         pushToast("Checkpoint!", 1.6f);
-                        // Diske kaydet
-                        if (!erlik_SaveCheckpoint(m_spawnX, m_spawnY, m_tmjPath))
+
+                        // Diske kaydet (aktif slot)
+                        if (erlik_SaveCheckpointSlot(m_saveSlot, m_spawnX, m_spawnY, m_tmjPath)) {
+                            SDL_Log("[save] checkpoint saved to %s", erlik_SaveFilePathForSlot(m_saveSlot).c_str());
+                            pushToast("Saved to slot " + std::to_string(m_saveSlot), 1.0f);
+                        }
+                        else {
                             SDL_Log("[save] WARNING: could not write checkpoint file");
-                        else
-                            SDL_Log("[save] checkpoint saved to %s", erlik_SaveFilePath().c_str());
-                            Input::rumble(12000, 22000, 500);
+                            pushToast("Save failed", 1.0f);
+                            Input::rumble(12000, 22000, 120);
+                        }
+
+                        
                     }
                     else if (tr.type == "door") {
                         const auto * dst = m_tmj.findTriggerByName(tr.target);
