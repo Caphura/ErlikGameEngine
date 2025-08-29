@@ -4,6 +4,7 @@
 #include <unordered_map>
 #include <algorithm> // clamp
 #include <iostream>
+#include <cmath>     // sqrt, hypot, round
 
 namespace {
     bool g_ready = false;
@@ -18,7 +19,9 @@ namespace {
 
     enum class MusicState { Idle, FadingOut };
     static MusicState g_musicState = MusicState::Idle;
-
+    // Positional audio: listener konumu
+    static float g_listenerX = 0.f;
+    static float g_listenerY = 0.f;
 }
 
 namespace Erlik {
@@ -121,6 +124,44 @@ namespace Erlik {
         bool isReady() { return g_ready; }
 
     }
+
+    // --- Positional SFX yardımcıları ---
+    void Erlik::Audio::setListener(float x, float y) { g_listenerX = x; g_listenerY = y; }
+
+        int Erlik::Audio::playSfxPan(const std::string & name, float pan01, float dist01, int baseVolume)
+        {
+        auto it = g_sfx.find(name);
+        if (it == g_sfx.end()) { SDL_Log("[audio] SFX not found '%s'", name.c_str()); return -1; }
+        Mix_Chunk * c = it->second;
+        
+        // Kanalı başlat
+        int ch = Mix_PlayChannel(-1, c, 0);
+        if (ch < 0) return -1;
+        // Hacim: (1 - dist)^2 ile kıs
+        int vol = (baseVolume >= 0 ? baseVolume : g_sfxVolume);
+        float k = std::clamp(1.0f - std::clamp(dist01, 0.0f, 1.0f), 0.0f, 1.0f);
+        vol = (int)std::lround(vol * k * k);
+        Mix_Volume(ch, std::clamp(vol, 0, MIX_MAX_VOLUME));
+
+        // Pan: 0..1 → L/R 255..0 / 0..255
+        float p = std::clamp(pan01, 0.0f, 1.0f);
+        Uint8 left = (Uint8)std::lround((1.0 - p) * 255.0);
+        Uint8 right = (Uint8)std::lround(p * 255.0);
+        Mix_SetPanning(ch, left, right); // (isteğe bağlı) Mix_SetDistance ile kombine de edilebilir
+        return ch;
+        }
+
+        int Erlik::Audio::playSfxAt(const std::string & name, float srcX, float srcY, float hearRadiusPx, int baseVolume)
+        {
+        // Pan için X farkı, attenuation için 2D mesafe
+        float dx = srcX - g_listenerX;
+        float dy = srcY - g_listenerY;
+        float dist = std::sqrt(dx * dx + dy * dy);
+        float dist01 = (hearRadiusPx > 1.f) ? std::clamp(dist / hearRadiusPx, 0.f, 1.f) : 0.f;
+        // Pan: X farkını aynı yarıçapla normalle
+        float pan01 = 0.5f + 0.5f * std::clamp(dx / std::max(hearRadiusPx, 1.f), -1.f, 1.f);
+        return playSfxPan(name, pan01, dist01, baseVolume);
+        }
 
     bool Erlik::Audio::crossfadeTo(const std::string& name, int loops, int fadeOutMs, int fadeInMs, float volume) {
         if (!g_ready) return false;

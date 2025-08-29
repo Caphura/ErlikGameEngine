@@ -381,9 +381,6 @@ namespace Erlik {
                 
             }
 
-            Audio::tick();
-
-
             // --- Save Slot select (F2/F3/F4) ---
             if (Input::keyPressed(SDL_SCANCODE_F2)) { m_saveSlot = 1; pushToast("Slot 1", 0.6f); }
             if (Input::keyPressed(SDL_SCANCODE_F3)) { m_saveSlot = 2; pushToast("Slot 2", 0.6f); }
@@ -439,6 +436,9 @@ namespace Erlik {
             // Fizik çağrısı (YENİ imza!)
             integrate(m_player, m_map, m_pp, (float)dt, left, right, jumpPressed, jumpHeld, dropRequest);
 
+            // Listener = oyuncu (her kare güncel tut)
+            Audio::setListener(m_player.x, m_player.y);
+
             auto overlap = [](float ax, float ay, float aw, float ah,
                 float bx, float by, float bw, float bh)->bool {
                     return (ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by);
@@ -488,11 +488,13 @@ namespace Erlik {
                             m_doorTeleportY = dst->y + dst->h * 0.5f;
                             m_doorTeleportPending = true;
                             
-                                // Kapı SFX (trigger sfx > "door" > "step")
-                                int ch = -1;
-                            if (!tr.sfx.empty()) ch = Audio::playSfx(tr.sfx);
-                            if (ch < 0)          ch = Audio::playSfx("door");
-                            if (ch < 0)          ch = Audio::playSfx("step");
+                            // Kapı SFX (trigger sfx > "door" > "step") — konumsal
+                            float sx = tr.x + tr.w * 0.5f;
+                            float sy = tr.y + tr.h * 0.5f;
+                            int ch = -1;
+                            if (!tr.sfx.empty()) ch = Audio::playSfxAt(tr.sfx, sx, sy, 900.f);
+                            if (ch < 0)          ch = Audio::playSfxAt("door", sx, sy, 900.f);
+                            if (ch < 0)          ch = Audio::playSfxAt("step", sx, sy, 900.f);
                             
                                 // Rumble + Shake
                             float shakeK = (tr.shake > 0.f) ? std::clamp(tr.shake, 0.f, 1.f) : 0.5f;
@@ -580,9 +582,9 @@ namespace Erlik {
             {
                 const bool landingNow = (!m_prevOnGround && m_player.onGround);
                 if (landingNow) {
-                // SFX: 'land' varsa çal, yoksa 'step' ile yedekle
-                    int ch = Audio::playSfx("land");
-                    if (ch < 0) Audio::playSfx("step");
+                // SFX: iniş sesini oyuncu konumundan çal
+                    int ch = Audio::playSfxAt("land", m_player.x, m_player.y, 600.f);
+                    if (ch < 0) Audio::playSfxAt("step", m_player.x, m_player.y, 600.f);
                     // Kısa kamera sarsıntısı ve rumble
                     m_shake = std::min(1.0f, m_shake + 0.25f);
                     Input::rumble(12000, 22000, 70); // low, high, ms
@@ -650,7 +652,8 @@ namespace Erlik {
                     if (m_runDustTimer <= 0.0f) {
                         m_runDustTimer = 0.24f - 0.12f * k;
 
-                        Audio::playSfx("step", 0, -1, 90);
+                        // adım sesi: oyuncu konumundan (çoğunlukla merkezde)
+                        Audio::playSfxAt("step", m_player.x, m_player.y, 600.f, 90);
 
                         float behind = (m_faceRight ? -1.f : +1.f) * (m_player.halfW * 0.65f);
                         float fx = m_player.x + behind;
