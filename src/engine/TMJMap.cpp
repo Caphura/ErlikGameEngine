@@ -196,7 +196,16 @@ namespace Erlik {
                     t.music = json_str_or(O, "music", "");
                     t.exitMusic = json_str_or(O, "exitMusic", "");
                     t.musicVol = json_float_or(O, "musicVol", 1.0f);
-                    t.musicFadeMs = (int)json_float_or(O, "musicFadeMs", 0.0f);
+                    t.musicFadeMs = json_float_or(O, "musicFadeMs", 0.0f);
+                    t.musicFadeInMs = json_float_or(O, "musicFadeInMs", 0.0f);
+                    t.musicFadeOutMs = json_float_or(O, "musicFadeOutMs", 0.0f);
+
+                    // fallback: sadece musicFadeMs verilmiþse iki tarafa da uygula
+                    if (t.musicFadeInMs <= 0.f && t.musicFadeOutMs <= 0.f && t.musicFadeMs > 0.f) {
+                        t.musicFadeInMs = t.musicFadeMs;
+                        t.musicFadeOutMs = t.musicFadeMs;
+                    }
+
 
                     if (!t.type.empty() && t.w > 0 && t.h > 0)
                         m_triggers.push_back(std::move(t));
@@ -421,6 +430,21 @@ namespace Erlik {
 
             r2d.setCamera(cam);
 
+            // Eðer statik cache varsa tek blit ile çiz ve devam et
+            if (L.propStatic && L.cacheTex.sdl()) {
+                Uint8 alpha = (Uint8)std::round(std::clamp(L.opacity, 0.f, 1.f) * 255.f);
+                L.cacheTex.setAlpha(alpha);
+                // Tüm harita boyutunda cache (merkezden çiziyoruz)
+                const float mapW = (float)(m_mapCols * m_tileW);
+                const float mapH = (float)(m_mapRows * m_tileH);
+                const float cx = mapW * 0.5f + L.offsetX;
+                const float cy = mapH * 0.5f + L.offsetY;
+                r2d.drawTextureSDL(L.cacheTex.sdl(), nullptr, cx, cy, 1.0f, 0.0f, SDL_FLIP_NONE);
+                L.cacheTex.setAlpha(255);
+                continue;
+
+            }
+
             float left = cam.x, top = cam.y;
             float right = cam.x + vw / cam.zoom, bottom = cam.y + vh / cam.zoom;
             int tx0 = (int)std::floor(left / m_tileW);
@@ -485,6 +509,21 @@ namespace Erlik {
             cam.y = base.y * L.parallaxY;
 
             r2d.setCamera(cam);
+
+            // Eðer statik cache varsa tek blit ile çiz ve devam et
+            if (L.propStatic && L.cacheTex.sdl()) {
+                Uint8 alpha = (Uint8)std::round(std::clamp(L.opacity, 0.f, 1.f) * 255.f);
+                L.cacheTex.setAlpha(alpha);
+                // Tüm harita boyutunda cache (merkezden çiziyoruz)
+                const float mapW = (float)(m_mapCols * m_tileW);
+                const float mapH = (float)(m_mapRows * m_tileH);
+                const float cx = mapW * 0.5f + L.offsetX;
+                const float cy = mapH * 0.5f + L.offsetY;
+                r2d.drawTextureSDL(L.cacheTex.sdl(), nullptr, cx, cy, 1.0f, 0.0f, SDL_FLIP_NONE);
+                L.cacheTex.setAlpha(255);
+                continue;
+
+            }
 
             float left = cam.x, top = cam.y;
             float right = cam.x + vw / cam.zoom, bottom = cam.y + vh / cam.zoom;

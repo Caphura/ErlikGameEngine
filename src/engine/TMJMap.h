@@ -24,7 +24,9 @@ namespace Erlik {
         std::string music;       // enter: çalýnacak müzik adý (Audio::loadMusic ile yüklenmiþ)
         std::string exitMusic;   // exit: boþ deðilse buna dön (boþsa önceki müziðe döner)
         float       musicVol = 1.0f;   // 0..1
-        int         musicFadeMs = 0;   // enter/exit geçiþlerinde fade süresi (ms)
+        float       musicFadeMs = 0.0f;     // (ops.) tek deðer verildiyse fallback
+        float       musicFadeInMs = 0.0f;   // (ops.) ayrý fade-in
+        float       musicFadeOutMs = 0.0f;  // (ops.) ayrý fade-out
     };
 
     class TMJMap {

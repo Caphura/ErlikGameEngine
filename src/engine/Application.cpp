@@ -330,6 +330,10 @@ namespace Erlik {
     }
 
     void Application::update(double dt) {
+        
+        // Crossfade durum makinesi her kare ilerlesin (pause olsa bile)
+        Audio::tick();
+
         if (!m_paused) {
             bool left = Input::keyDown(SDL_SCANCODE_A) || Input::keyDown(SDL_SCANCODE_LEFT);
             bool right = Input::keyDown(SDL_SCANCODE_D) || Input::keyDown(SDL_SCANCODE_RIGHT);
@@ -432,6 +436,9 @@ namespace Erlik {
             // Fizik çağrısı (YENİ imza!)
             integrate(m_player, m_map, m_pp, (float)dt, left, right, jumpPressed, jumpHeld, dropRequest);
 
+            // Listener = oyuncu (her kare güncel tut)
+            Audio::setListener(m_player.x, m_player.y);
+
             auto overlap = [](float ax, float ay, float aw, float ah,
                 float bx, float by, float bw, float bh)->bool {
                     return (ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by);
@@ -481,11 +488,13 @@ namespace Erlik {
                             m_doorTeleportY = dst->y + dst->h * 0.5f;
                             m_doorTeleportPending = true;
                             
-                                // Kapı SFX (trigger sfx > "door" > "step")
-                                int ch = -1;
-                            if (!tr.sfx.empty()) ch = Audio::playSfx(tr.sfx);
-                            if (ch < 0)          ch = Audio::playSfx("door");
-                            if (ch < 0)          ch = Audio::playSfx("step");
+                            // Kapı SFX (trigger sfx > "door" > "step") — konumsal
+                            float sx = tr.x + tr.w * 0.5f;
+                            float sy = tr.y + tr.h * 0.5f;
+                            int ch = -1;
+                            if (!tr.sfx.empty()) ch = Audio::playSfxAt(tr.sfx, sx, sy, 900.f);
+                            if (ch < 0)          ch = Audio::playSfxAt("door", sx, sy, 900.f);
+                            if (ch < 0)          ch = Audio::playSfxAt("step", sx, sy, 900.f);
                             
                                 // Rumble + Shake
                             float shakeK = (tr.shake > 0.f) ? std::clamp(tr.shake, 0.f, 1.f) : 0.5f;
@@ -513,45 +522,43 @@ namespace Erlik {
                         if (tr.zoom > 0.0f) {
                             m_cam.zoom = std::clamp(tr.zoom, 0.25f, 3.0f);
                         }
-                        // --- Music region: ENTER ---
-                            if (!tr.music.empty()) {
-                            // Yalnızca değişiyorsa çal
-                                if (tr.music != m_musicCurrent) {
+                        // --- Music region: ENTER (CROSSFADE) ---
+                        if (!tr.music.empty()) {
+                            if (tr.music != m_musicCurrent) {
                                 m_musicBeforeRegion = m_musicCurrent;
                                 const float vol = std::clamp(tr.musicVol, 0.0f, 1.0f);
-                                if (tr.musicFadeMs > 0)
-                                    Audio::playMusicFade(tr.music, -1, tr.musicFadeMs, vol);
-                                else
-                                    Audio::playMusic(tr.music, -1, vol);
+                                const int fin = (tr.musicFadeInMs > 0.f) ? (int)tr.musicFadeInMs: (tr.musicFadeMs > 0.f ? (int)tr.musicFadeMs : 400);
+                                const int fout = (tr.musicFadeOutMs > 0.f) ? (int)tr.musicFadeOutMs: (tr.musicFadeMs > 0.f ? (int)tr.musicFadeMs : 250);
+                                Audio::crossfadeTo(tr.music, -1, fout, fin, vol);
                                 m_musicCurrent = tr.music;
                             }
                             m_activeMusicRegionId = tr.id;
-                            SDL_Log("MUSIC ENTER region=%s music=%s vol=%.2f fadeMs=%d",
-                                tr.name.c_str(), tr.music.c_str(), tr.musicVol, tr.musicFadeMs);
+                            SDL_Log("MUSIC ENTER region=%s music=%s vol=%.2f fadeIn=%d fadeOut=%d",
+                                tr.name.c_str(), tr.music.c_str(), tr.musicVol,
+                                (int)(tr.musicFadeInMs > 0 ? tr.musicFadeInMs : (tr.musicFadeMs > 0 ? tr.musicFadeMs : 400)),
+                                (int)(tr.musicFadeOutMs > 0 ? tr.musicFadeOutMs : (tr.musicFadeMs > 0 ? tr.musicFadeMs : 250)));
                         }
-                        SDL_Log("TRIGGER %s: name=%s zoom=%.2f", tr.type.c_str(), tr.name.c_str(), tr.zoom);
                     }
 
                     if (tr.once) m_triggersFired.insert(tr.id);
                 }
                 else if (!now && prev) {
                     // === EXIT ===
-                        if (tr.type == "region") {
+                    if (tr.type == "region") {
                         // yalnızca aktif müzik bölgesinden çıkıyorsak geri dön
                             if (tr.id == m_activeMusicRegionId) {
                             std::string next = !tr.exitMusic.empty() ? tr.exitMusic : m_musicBeforeRegion;
+                            const int fin = (tr.musicFadeInMs > 0.f) ? (int)tr.musicFadeInMs: (tr.musicFadeMs > 0.f ? (int)tr.musicFadeMs : 400);
+                            const int fout = (tr.musicFadeOutMs > 0.f) ? (int)tr.musicFadeOutMs: (tr.musicFadeMs > 0.f ? (int)tr.musicFadeMs : 250);
                             if (!next.empty() && next != m_musicCurrent) {
-                                if (tr.musicFadeMs > 0)
-                                    Audio::playMusicFade(next, -1, tr.musicFadeMs, 1.0f);
-                                else
-                                    Audio::playMusic(next, -1, 1.0f);
+                                Audio::crossfadeTo(next, -1, fout, fin, 1.0f);
                                 m_musicCurrent = next;
                             }
                             else if (next.empty()) {
-                                // hiçbiri yoksa durdur
-                                    if (tr.musicFadeMs > 0) Audio::stopMusic(tr.musicFadeMs);
-                                else                     Audio::stopMusic(0);
+                             // hiçbiri yoksa durdur (fade-out kullan)
+                                Audio::stopMusic(fout);
                                 m_musicCurrent.clear();
+
                             }
                             m_activeMusicRegionId = -1;
                             SDL_Log("MUSIC EXIT region=%s -> next=%s", tr.name.c_str(), m_musicCurrent.c_str());
@@ -575,9 +582,9 @@ namespace Erlik {
             {
                 const bool landingNow = (!m_prevOnGround && m_player.onGround);
                 if (landingNow) {
-                // SFX: 'land' varsa çal, yoksa 'step' ile yedekle
-                    int ch = Audio::playSfx("land");
-                    if (ch < 0) Audio::playSfx("step");
+                // SFX: iniş sesini oyuncu konumundan çal
+                    int ch = Audio::playSfxAt("land", m_player.x, m_player.y, 600.f);
+                    if (ch < 0) Audio::playSfxAt("step", m_player.x, m_player.y, 600.f);
                     // Kısa kamera sarsıntısı ve rumble
                     m_shake = std::min(1.0f, m_shake + 0.25f);
                     Input::rumble(12000, 22000, 70); // low, high, ms
@@ -645,7 +652,8 @@ namespace Erlik {
                     if (m_runDustTimer <= 0.0f) {
                         m_runDustTimer = 0.24f - 0.12f * k;
 
-                        Audio::playSfx("step", 0, -1, 90);
+                        // adım sesi: oyuncu konumundan (çoğunlukla merkezde)
+                        Audio::playSfxAt("step", m_player.x, m_player.y, 600.f, 90);
 
                         float behind = (m_faceRight ? -1.f : +1.f) * (m_player.halfW * 0.65f);
                         float fx = m_player.x + behind;
