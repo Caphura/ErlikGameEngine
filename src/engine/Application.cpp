@@ -330,6 +330,10 @@ namespace Erlik {
     }
 
     void Application::update(double dt) {
+        
+        // Crossfade durum makinesi her kare ilerlesin (pause olsa bile)
+        Audio::tick();
+
         if (!m_paused) {
             bool left = Input::keyDown(SDL_SCANCODE_A) || Input::keyDown(SDL_SCANCODE_LEFT);
             bool right = Input::keyDown(SDL_SCANCODE_D) || Input::keyDown(SDL_SCANCODE_RIGHT);
@@ -376,6 +380,9 @@ namespace Erlik {
                 pushToast("Respawn", 0.8f);
                 
             }
+
+            Audio::tick();
+
 
             // --- Save Slot select (F2/F3/F4) ---
             if (Input::keyPressed(SDL_SCANCODE_F2)) { m_saveSlot = 1; pushToast("Slot 1", 0.6f); }
@@ -513,45 +520,43 @@ namespace Erlik {
                         if (tr.zoom > 0.0f) {
                             m_cam.zoom = std::clamp(tr.zoom, 0.25f, 3.0f);
                         }
-                        // --- Music region: ENTER ---
-                            if (!tr.music.empty()) {
-                            // Yalnızca değişiyorsa çal
-                                if (tr.music != m_musicCurrent) {
+                        // --- Music region: ENTER (CROSSFADE) ---
+                        if (!tr.music.empty()) {
+                            if (tr.music != m_musicCurrent) {
                                 m_musicBeforeRegion = m_musicCurrent;
                                 const float vol = std::clamp(tr.musicVol, 0.0f, 1.0f);
-                                if (tr.musicFadeMs > 0)
-                                    Audio::playMusicFade(tr.music, -1, tr.musicFadeMs, vol);
-                                else
-                                    Audio::playMusic(tr.music, -1, vol);
+                                const int fin = (tr.musicFadeInMs > 0.f) ? (int)tr.musicFadeInMs: (tr.musicFadeMs > 0.f ? (int)tr.musicFadeMs : 400);
+                                const int fout = (tr.musicFadeOutMs > 0.f) ? (int)tr.musicFadeOutMs: (tr.musicFadeMs > 0.f ? (int)tr.musicFadeMs : 250);
+                                Audio::crossfadeTo(tr.music, -1, fout, fin, vol);
                                 m_musicCurrent = tr.music;
                             }
                             m_activeMusicRegionId = tr.id;
-                            SDL_Log("MUSIC ENTER region=%s music=%s vol=%.2f fadeMs=%d",
-                                tr.name.c_str(), tr.music.c_str(), tr.musicVol, tr.musicFadeMs);
+                            SDL_Log("MUSIC ENTER region=%s music=%s vol=%.2f fadeIn=%d fadeOut=%d",
+                                tr.name.c_str(), tr.music.c_str(), tr.musicVol,
+                                (int)(tr.musicFadeInMs > 0 ? tr.musicFadeInMs : (tr.musicFadeMs > 0 ? tr.musicFadeMs : 400)),
+                                (int)(tr.musicFadeOutMs > 0 ? tr.musicFadeOutMs : (tr.musicFadeMs > 0 ? tr.musicFadeMs : 250)));
                         }
-                        SDL_Log("TRIGGER %s: name=%s zoom=%.2f", tr.type.c_str(), tr.name.c_str(), tr.zoom);
                     }
 
                     if (tr.once) m_triggersFired.insert(tr.id);
                 }
                 else if (!now && prev) {
                     // === EXIT ===
-                        if (tr.type == "region") {
+                    if (tr.type == "region") {
                         // yalnızca aktif müzik bölgesinden çıkıyorsak geri dön
                             if (tr.id == m_activeMusicRegionId) {
                             std::string next = !tr.exitMusic.empty() ? tr.exitMusic : m_musicBeforeRegion;
+                            const int fin = (tr.musicFadeInMs > 0.f) ? (int)tr.musicFadeInMs: (tr.musicFadeMs > 0.f ? (int)tr.musicFadeMs : 400);
+                            const int fout = (tr.musicFadeOutMs > 0.f) ? (int)tr.musicFadeOutMs: (tr.musicFadeMs > 0.f ? (int)tr.musicFadeMs : 250);
                             if (!next.empty() && next != m_musicCurrent) {
-                                if (tr.musicFadeMs > 0)
-                                    Audio::playMusicFade(next, -1, tr.musicFadeMs, 1.0f);
-                                else
-                                    Audio::playMusic(next, -1, 1.0f);
+                                Audio::crossfadeTo(next, -1, fout, fin, 1.0f);
                                 m_musicCurrent = next;
                             }
                             else if (next.empty()) {
-                                // hiçbiri yoksa durdur
-                                    if (tr.musicFadeMs > 0) Audio::stopMusic(tr.musicFadeMs);
-                                else                     Audio::stopMusic(0);
+                             // hiçbiri yoksa durdur (fade-out kullan)
+                                Audio::stopMusic(fout);
                                 m_musicCurrent.clear();
+
                             }
                             m_activeMusicRegionId = -1;
                             SDL_Log("MUSIC EXIT region=%s -> next=%s", tr.name.c_str(), m_musicCurrent.c_str());
