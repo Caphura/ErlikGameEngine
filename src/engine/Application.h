@@ -146,6 +146,9 @@ namespace Erlik {
         float m_spawnX = 0.f, m_spawnY = 0.f;    // checkpoint noktasý
         int   m_saveSlot = 1;                    // aktif kayýt slotu (1..3)
 
+        // Inventory: anahtarlar
+        std::unordered_set<std::string> m_keys;
+
         // Music region state
         int         m_activeMusicRegionId = -1;
         std::string m_musicCurrent;      // þu an çalan (biz takip ediyoruz)
