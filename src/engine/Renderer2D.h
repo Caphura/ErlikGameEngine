@@ -26,6 +26,13 @@ public:
 
     void setCamera(const Camera2D& c){ m_cam=c; }
     const Camera2D& camera() const { return m_cam; }
+    // SDL_Texture* doðrudan çizen yardýmcý (cache blit için)
+    void drawTextureSDL(SDL_Texture * tex,
+        const SDL_Rect * src,
+        float cx, float cy,
+        float scale = 1.f,
+        float rotationDeg = 0.f,
+        SDL_RendererFlip flip = SDL_FLIP_NONE);
 
 private:
     SDL_Renderer* m_r = nullptr;

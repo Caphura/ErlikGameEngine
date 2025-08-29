@@ -58,4 +58,24 @@ void Renderer2D::drawGrid(int spacing, Uint8 r, Uint8 g, Uint8 b, Uint8 a){
     for(int y=startY;y<=maxY;y+=spacing){ float sy=(y-m_cam.y)*m_cam.zoom; SDL_RenderDrawLineF(m_r, 0.f,sy, (float)w,sy); }
 }
 
+void Renderer2D::drawTextureSDL(SDL_Texture* tex, const SDL_Rect* src,
+    float cx, float cy, float scale, float rot, SDL_RendererFlip flip)
+    {
+    if (!tex) return;
+    int tw = 0, th = 0; SDL_QueryTexture(tex, nullptr, nullptr, &tw, &th);
+    const int sw = src ? src->w : tw;
+    const int sh = src ? src->h : th;
+    
+    int w = (int)(sw * scale * m_cam.zoom);
+    int h = (int)(sh * scale * m_cam.zoom);
+    SDL_FRect dst{
+    (cx - m_cam.x) * m_cam.zoom - w * 0.5f,
+    (cy - m_cam.y) * m_cam.zoom - h * 0.5f,
+    (float)w, (float)h
+    };
+    SDL_FPoint center{ dst.w * 0.5f, dst.h * 0.5f };
+    SDL_RenderCopyExF(m_r, tex, src, &dst, rot, &center, flip);
+    m_drawCalls++;
+}
+
 } // namespace Erlik

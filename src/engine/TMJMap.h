@@ -60,11 +60,14 @@ namespace Erlik {
             float  parallaxY = 1.0f;
             float  offsetX = 0.0f; // layer offset
             float  offsetY = 0.0f;
+            std::string preset;      // editor-side parallax preset adý (ops.)
 
             // YENÝ: Tiled Layer Properties
             bool propCollision = false;
             bool propOneWay = false;
             bool propFG = false;   // <-- FG katmaný mý?
+            bool propStatic = false; // <-- statik mi?
+            Texture cacheTex;   // RAII: otomatik yok olur
         };
 
         // Tiled gid flip bayraklarý
@@ -88,6 +91,8 @@ namespace Erlik {
 
         // Yardýmcýlar
         static std::string dirOf(const std::string& path);
+        void destroyCaches();                 // RAII olsa da hot-reload için temizle
+        bool buildStaticCaches(SDL_Renderer*); // static=true layer’larý bir kez çiz
     };
 
 } // namespace Erlik

@@ -86,6 +86,8 @@ namespace Erlik {
         json j; in >> j;
 
         m_baseDir = dirOf(tmjPath);
+        // Önceki yüklemeden kalmýþ cache’leri temizle (hot-reload için)
+        destroyCaches();
 
         // Harita boyutlarý
         m_mapCols = j.value("width", 0);
@@ -229,15 +231,54 @@ namespace Erlik {
                 if (lj.contains("properties") && lj["properties"].is_array()) {
                     for (const auto& pj : lj["properties"]) {
                         std::string pname = pj.value("name", std::string());
-                        bool pval = false;
-                        if (pj.contains("value")) {
-                            if (pj["value"].is_boolean()) pval = pj["value"].get<bool>();
-                            else if (pj["value"].is_number_integer()) pval = pj["value"].get<int>() != 0;
+                        if (!pj.contains("value")) continue;
+                        
+                            // --- bool bayraklar ---
+                            if (pj["value"].is_boolean()) {
+                            bool pval = pj["value"].get<bool>();
+                            if (pname == "collision" && pval) L.propCollision = true;
+                            if (pname == "oneway" && pval) L.propOneWay = true;
+                            if (pname == "fg" && pval) L.propFG = true;
+                            if (pname == "static" && pval) L.propStatic = true;
+                            continue;
+                            
                         }
-                        if (pname == "collision" && pval) L.propCollision = true;
-                        if (pname == "oneway" && pval) L.propOneWay = true;
-                        if (pname == "fg" && pval) L.propFG = true; // <-- varsa burada da yakalýyoruz
+                        // --- string preset ---
+                            if (pj["value"].is_string()) {
+                            std::string sval = pj["value"].get<std::string>();
+                                                        // normalleþtir
+                                for (auto& c : sval) c = (char)std::tolower((unsigned char)c);
+                            if (pname == "preset") {
+                                L.preset = sval; // uygulamayý birazdan yapacaðýz
+                                
+                            }
+                            continue;
+                        }
+                            // --- sayýsal override'lar ---
+                            if (pj["value"].is_number()) {
+                            double d = pj["value"].get<double>();
+                            if (pname == "parallaxx") L.parallaxX = (float)d;
+                            if (pname == "parallaxy") L.parallaxY = (float)d;
+                            if (pname == "offsetx")   L.offsetX = (float)d;
+                            if (pname == "offsety")   L.offsetY = (float)d;
+                            if (pname == "opacity")   L.opacity = (float)d;
+                            continue;
+                        }
                     }
+                }
+
+                // --- Editor-side Parallax Presets ---
+                if (!L.preset.empty()) {
+                    const std::string & p = L.preset;
+                    // Önerilen isimler:
+                    // "bg_sky", "bg_far", "bg_mid", "bg_near", "game", "fg"
+                    if (p == "bg_sky") { L.parallaxX = 0.20f; L.parallaxY = 0.10f; /*L.opacity=1.0f;*/ }
+                    else if (p == "bg_far") { L.parallaxX = 0.40f; L.parallaxY = 0.30f; }
+                    else if (p == "bg_mid") { L.parallaxX = 0.65f; L.parallaxY = 0.60f; }
+                    else if (p == "bg_near") { L.parallaxX = 0.85f; L.parallaxY = 0.85f; }
+                    else if (p == "game") { L.parallaxX = 1.00f; L.parallaxY = 1.00f; }
+                    else if (p == "fg") { L.parallaxX = 1.00f; L.parallaxY = 1.00f; L.propFG = true; }
+                    // Ýsteyen layer property ile (parallaxx/parallaxy) preset'in üstünü ezebilir.
                 }
 
                 // ÝSÝMDEN otomatik bayraklar (property eklemeyi unutsan da çalýþsýn)
@@ -263,6 +304,8 @@ namespace Erlik {
             m_mapCols, m_mapRows, m_tileW, m_tileH, m_layers.size(),
             (unsigned)m_firstGid, m_columns);
 
+        // Statik cache’leri inþa et (destekliyse)
+        buildStaticCaches(r);
         return (m_mapCols > 0 && m_mapRows > 0 && m_tileset.sdl() != nullptr);
     }
 
@@ -288,7 +331,23 @@ namespace Erlik {
 
             r2d.setCamera(cam);
 
-            // Culling
+      
+            // Eðer statik cache varsa tek blit ile çiz ve devam et
+            if (L.propStatic && L.cacheTex.sdl()) {
+                Uint8 alpha = (Uint8)std::round(std::clamp(L.opacity, 0.f, 1.f) * 255.f);
+                L.cacheTex.setAlpha(alpha);
+                // Tüm harita boyutunda cache (merkezden çiziyoruz)
+                const float mapW = (float)(m_mapCols * m_tileW);
+                const float mapH = (float)(m_mapRows * m_tileH);
+                const float cx = mapW * 0.5f + L.offsetX;
+                const float cy = mapH * 0.5f + L.offsetY;
+                r2d.drawTextureSDL(L.cacheTex.sdl(), nullptr, cx, cy, 1.0f, 0.0f, SDL_FLIP_NONE);
+                L.cacheTex.setAlpha(255);
+                continue;
+                
+            }
+
+            // Culling cach yoksa normal yol ile yap
             float left = cam.x, top = cam.y;
             float right = cam.x + vw / cam.zoom, bottom = cam.y + vh / cam.zoom;
             int tx0 = (int)std::floor(left / m_tileW);
@@ -529,6 +588,87 @@ namespace Erlik {
             if (t.name == name) return &t;
         }
         return nullptr;
+    }
+
+    void TMJMap::destroyCaches() {
+        for (auto& L : m_layers) L.cacheTex.destroy();
+    }
+
+    bool TMJMap::buildStaticCaches(SDL_Renderer* r) {
+        if (!r || !m_tileset.sdl()) return false;
+
+        // Renderer kapasitesi
+        SDL_RendererInfo info{}; SDL_GetRendererInfo(r, &info);
+        const int maxW = info.max_texture_width ? (int)info.max_texture_width : 16384;
+        const int maxH = info.max_texture_height ? (int)info.max_texture_height : 16384;
+
+        const int mapW = m_mapCols * m_tileW;
+        const int mapH = m_mapRows * m_tileH;
+        if (mapW <= 0 || mapH <= 0) return false;
+
+        const int tilesPerRow = (m_columns > 0) ? m_columns : (m_tileset.width() / m_tileW);
+
+        int built = 0, skipped = 0;
+
+        for (auto& L : m_layers) {
+            if (!L.propStatic || !L.visible || L.opacity <= 0.f) { skipped++; continue; }
+            if (L.propCollision || L.propOneWay) { skipped++; continue; } // fizik katmanlarý cache’lenmez
+            if (mapW > maxW || mapH > maxH) { SDL_Log("static-cache: skipped (too big) %dx%d > limit %dx%d", mapW, mapH, maxW, maxH); skipped++; continue; }
+
+            // Render target oluþtur
+            Texture rt;
+            if (!rt.createRenderTarget(r, mapW, mapH, SDL_PIXELFORMAT_RGBA8888)) {
+                SDL_Log("static-cache: create failed");
+                skipped++; continue;
+             
+            }
+
+            SDL_Texture* prev = SDL_GetRenderTarget(r);
+            SDL_SetRenderTarget(r, rt.sdl());
+            // Þeffaf temizle
+            SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
+            SDL_SetRenderDrawColor(r, 0, 0, 0, 0);
+            SDL_RenderClear(r);
+
+            // Layer’ý cache’e döþe
+            for (int ty = 0; ty < m_mapRows; ++ty) {
+                for (int tx = 0; tx < m_mapCols; ++tx) {
+                    size_t idx = (size_t)ty * (size_t)m_mapCols + (size_t)tx;
+                    uint32_t gidRaw = (idx < L.data.size()) ? L.data[idx] : 0u;
+                    if (gidRaw == 0u) continue;
+
+                    uint32_t gid = gidRaw & GID_MASK;
+                    const bool flipH = (gidRaw & FLIP_H) != 0;
+                    const bool flipV = (gidRaw & FLIP_V) != 0;
+
+                    int local = (int)gid - (int)m_firstGid;
+                    if (local < 0) continue;
+
+                    int sx = m_margin + (local % tilesPerRow) * (m_tileW + m_spacing);
+                    int sy = m_margin + (local / tilesPerRow) * (m_tileH + m_spacing);
+                    SDL_Rect src{ sx, sy, m_tileW, m_tileH };
+
+                    SDL_FRect dst{
+                        tx * (float)m_tileW + L.offsetX,
+                        ty * (float)m_tileH + L.offsetY,
+                        (float)m_tileW, (float)m_tileH
+                    };
+
+                    SDL_RendererFlip flip = SDL_FLIP_NONE;
+                    if (flipH) flip = (SDL_RendererFlip)(flip | SDL_FLIP_HORIZONTAL);
+                    if (flipV) flip = (SDL_RendererFlip)(flip | SDL_FLIP_VERTICAL);
+
+                    SDL_RenderCopyExF(r, m_tileset.sdl(), &src, &dst, 0.0, nullptr, flip);
+                }
+            }
+
+            SDL_SetRenderTarget(r, prev);
+            L.cacheTex = std::move(rt); // move-assign
+            built++;
+        }
+
+        SDL_Log("static-cache: built=%d skipped=%d", built, skipped);
+        return built > 0;
     }
 
 
