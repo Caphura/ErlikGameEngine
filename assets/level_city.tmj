@@ -47,6 +47,21 @@
                  "name":"dB",
                  "properties":[
                         {
+                         "name":"consumeKey",
+                         "type":"bool",
+                         "value":true
+                        }, 
+                        {
+                         "name":"lockedMsg",
+                         "type":"string",
+                         "value":"LOCKED! Need RED key!"
+                        }, 
+                        {
+                         "name":"lockedSfx",
+                         "type":"string",
+                         "value":"locked"
+                        }, 
+                        {
                          "name":"message",
                          "type":"string",
                          "value":"DAAAYT!"
@@ -57,6 +72,11 @@
                          "value":true
                         }, 
                         {
+                         "name":"requiresKey",
+                         "type":"string",
+                         "value":"red"
+                        }, 
+                        {
                          "name":"sfx",
                          "type":"string",
                          "value":"door"
@@ -65,6 +85,11 @@
                          "name":"target",
                          "type":"string",
                          "value":"dA"
+                        }, 
+                        {
+                         "name":"unlockMsg",
+                         "type":"string",
+                         "value":"Unlocked."
                         }, 
                         {
                          "name":"zoom",
@@ -146,6 +171,38 @@
                  "width":434,
                  "x":496,
                  "y":942
+                }, 
+                {
+                 "height":64,
+                 "id":13,
+                 "name":"red",
+                 "properties":[
+                        {
+                         "name":"giveKey",
+                         "type":"string",
+                         "value":"red"
+                        }, 
+                        {
+                         "name":"message",
+                         "type":"string",
+                         "value":"Red Taken!"
+                        }, 
+                        {
+                         "name":"once",
+                         "type":"bool",
+                         "value":true
+                        }, 
+                        {
+                         "name":"sfx",
+                         "type":"string",
+                         "value":"key"
+                        }],
+                 "rotation":0,
+                 "type":"key",
+                 "visible":true,
+                 "width":86,
+                 "x":982,
+                 "y":1048
                 }],
          "opacity":1,
          "type":"objectgroup",
@@ -734,8 +791,8 @@
          "x":0,
          "y":0
         }],
- "nextlayerid":10,
- "nextobjectid":12,
+ "nextlayerid":11,
+ "nextobjectid":16,
  "orientation":"orthogonal",
  "renderorder":"left-down",
  "tiledversion":"1.11.2",

@@ -192,6 +192,16 @@ namespace Erlik {
                     t.fadeInMs = json_float_or(O, "fadeInMs", 0.0f);
                     t.fadeOutMs = json_float_or(O, "fadeOutMs", 0.0f);
                     t.shake = json_float_or(O, "shake", 0.0f);
+
+                    // keys/locked
+                    t.giveKey = json_str_or(O, "giveKey", "");
+                    t.requiresKey = json_str_or(O, "requiresKey", "");
+                    t.consumeKey = json_bool_or(O, "consumeKey", true);
+                    t.lockedMsg = json_str_or(O, "lockedMsg", "");
+                    t.unlockMsg = json_str_or(O, "unlockMsg", "");
+                    t.lockedSfx = json_str_or(O, "lockedSfx", "");
+                    t.unlockSfx = json_str_or(O, "unlockSfx", "");
+
                     // music region props (opsiyonel)
                     t.music = json_str_or(O, "music", "");
                     t.exitMusic = json_str_or(O, "exitMusic", "");
@@ -209,6 +219,9 @@ namespace Erlik {
 
                     if (!t.type.empty() && t.w > 0 && t.h > 0)
                         m_triggers.push_back(std::move(t));
+
+                    if (!t.giveKey.empty())     t.giveKey = tolower_copy(t.giveKey);
+                    if (!t.requiresKey.empty()) t.requiresKey = tolower_copy(t.requiresKey);
                 }
             }
         }

@@ -27,6 +27,15 @@ namespace Erlik {
         float       musicFadeMs = 0.0f;     // (ops.) tek deðer verildiyse fallback
         float       musicFadeInMs = 0.0f;   // (ops.) ayrý fade-in
         float       musicFadeOutMs = 0.0f;  // (ops.) ayrý fade-out
+
+        // --- Key / Locked Doors ---
+        std::string giveKey;        // bu triggere girince verilecek anahtar adý (örn. "red")
+        std::string requiresKey;    // bu kapýyý açmak için gereken anahtar (örn. "red")
+        bool consumeKey = true; // anahtarý kullandýktan sonra silinsin mi?
+        std::string lockedMsg;      // kilitliyken gösterilecek mesaj
+        std::string unlockMsg;      // açýlýrken gösterilecek mesaj (ops.)
+        std::string lockedSfx;      // kilitli sesi (ops.), default: "locked"
+        std::string unlockSfx;      // kilit açma sesi (ops.), default: "door"
     };
 
     class TMJMap {

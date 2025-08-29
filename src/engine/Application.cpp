@@ -188,6 +188,8 @@ namespace Erlik {
         Audio::loadSfx("step", "assets/audio/step.wav");
         // Kapı/teleport için bir efekt. Dosya ismini kendine göre ayarlayabilirsin:
         Audio::loadSfx("door", "assets/audio/door.wav");   // ör: assets/audio/door.wav
+        Audio::loadSfx("locked", "assets/audio/locked.wav"); // opsiyonel dosya; yoksa fallback çalışır
+        Audio::loadSfx("key", "assets/audio/key.wav");    // anahtar toplama
         Audio::loadMusic("bgm", "assets/audio/level.ogg");
         Audio::loadMusic("bgm_forest", "assets/audio/forest.ogg");
         Audio::playMusic("bgm", -1, 0.60f); // oyun açılır açılmaz çalsın
@@ -467,7 +469,7 @@ namespace Erlik {
                         SDL_SetWindowTitle(m_window, "Checkpoint!");
                         pushToast("Checkpoint!", 1.6f);
 
-                        // Diske kaydet (aktif slot)
+                        // aktif slota diske yaz
                         if (erlik_SaveCheckpointSlot(m_saveSlot, m_spawnX, m_spawnY, m_tmjPath)) {
                             SDL_Log("[save] checkpoint saved to %s", erlik_SaveFilePathForSlot(m_saveSlot).c_str());
                             pushToast("Saved to slot " + std::to_string(m_saveSlot), 1.0f);
@@ -478,87 +480,114 @@ namespace Erlik {
                             Input::rumble(12000, 22000, 120);
                         }
 
-                        
+                        if (tr.once) m_triggersFired.insert(tr.id);
+                    }
+                    else if (tr.type == "key" || !tr.giveKey.empty()) {
+                        std::string k = tr.giveKey.empty() ? tr.name : tr.giveKey;
+                        for (auto& c : k) c = (char)std::tolower((unsigned char)c);
+                        if (!k.empty()) {
+                            m_keys.insert(k);
+                            SDL_Log("PICKUP key: %s (id=%d)", k.c_str(), tr.id);
+                            pushToast(tr.message.empty() ? ("Anahtar aldın: " + k) : tr.message, 1.6f);
+                            Audio::playSfxAt(tr.sfx.empty() ? "key" : tr.sfx,
+                                tr.x + tr.w * 0.5f, tr.y + tr.h * 0.5f, 900.f);
+                            if (tr.once) m_triggersFired.insert(tr.id);
+                        }
                     }
                     else if (tr.type == "door") {
-                        const auto * dst = m_tmj.findTriggerByName(tr.target);
-                        if (dst) {
-                            // Hedefi kaydet, fade-in bitiminde teleport et
-                            m_doorTeleportX = dst->x + dst->w * 0.5f;
-                            m_doorTeleportY = dst->y + dst->h * 0.5f;
-                            m_doorTeleportPending = true;
-                            
-                            // Kapı SFX (trigger sfx > "door" > "step") — konumsal
-                            float sx = tr.x + tr.w * 0.5f;
-                            float sy = tr.y + tr.h * 0.5f;
-                            int ch = -1;
-                            if (!tr.sfx.empty()) ch = Audio::playSfxAt(tr.sfx, sx, sy, 900.f);
-                            if (ch < 0)          ch = Audio::playSfxAt("door", sx, sy, 900.f);
-                            if (ch < 0)          ch = Audio::playSfxAt("step", sx, sy, 900.f);
-                            
-                                // Rumble + Shake
-                            float shakeK = (tr.shake > 0.f) ? std::clamp(tr.shake, 0.f, 1.f) : 0.5f;
-                            m_shake = std::min(1.0f, m_shake + shakeK);
-                            Input::rumble(14000, 26000, (Uint32)(80 + 60 * shakeK));
-                            
-                                // Fade parametreleri (ms -> sn)
-                            m_doorFadeIn = (tr.fadeInMs > 0.f ? tr.fadeInMs : 120.f) / 1000.f;
-                            m_doorFadeOut = (tr.fadeOutMs > 0.f ? tr.fadeOutMs : 140.f) / 1000.f;
-                            m_doorFxActive = true; m_doorFxPhase = 1; m_doorFxT = 0.f; m_doorAlpha = 0.f;
-                            
-                                SDL_Log("TRIGGER door: %s -> %s (fade in/out, shake=%.2f)", tr.name.c_str(), tr.target.c_str(), shakeK);
-                            pushToast("Door: " + tr.name + " -> " + tr.target, 1.2f);
+                        // --- LOCK CHECK ---
+                        std::string need = tr.requiresKey;
+                        for (auto& c : need) c = (char)std::tolower((unsigned char)c);
+                        const bool hasKey = need.empty() || (m_keys.find(need) != m_keys.end());
 
-                            m_shake = std::min(1.0f, m_shake + 0.35f);
-                        } else {
-                            SDL_Log("WARN: door target not found: %s", tr.target.c_str());
+                        if (!hasKey) {
+                            const std::string msg = tr.lockedMsg.empty()
+                                ? (need.empty() ? "Kapı kilitli" : ("Kapı kilitli: " + need))
+                                : tr.lockedMsg;
+                            pushToast(msg, 1.4f);
+                            Audio::playSfxAt(tr.lockedSfx.empty() ? "locked" : tr.lockedSfx,
+                                tr.x + tr.w * 0.5f, tr.y + tr.h * 0.5f, 900.f);
+                            m_shake = std::min(1.0f, m_shake + 0.15f);
+                            Input::rumble(9000, 16000, 60);
+                            // kilitliyken teleport AKIŞINA GİRME
+                            continue;
                         }
+
+                        // anahtar varsa (gerekliyse tüket)
+                        if (!need.empty() && tr.consumeKey) m_keys.erase(need);
+                        if (!tr.unlockMsg.empty()) pushToast(tr.unlockMsg, 1.2f);
+
+                        // hedefi bul
+                        const auto* dst = m_tmj.findTriggerByName(tr.target);
+                        if (!dst) {
+                            SDL_Log("WARN: door target not found: %s", tr.target.c_str());
+                            continue;
+                        }
+
+                        // teleport parametreleri
+                        m_doorTeleportX = dst->x + dst->w * 0.5f;
+                        m_doorTeleportY = dst->y + dst->h * 0.5f;
+                        m_doorTeleportPending = true;
+
+                        // SFX (unlockSfx > sfx > door > step)
+                        float sx = tr.x + tr.w * 0.5f, sy = tr.y + tr.h * 0.5f;
+                        int ch = -1;
+                        if (!tr.unlockSfx.empty()) ch = Audio::playSfxAt(tr.unlockSfx, sx, sy, 900.f);
+                        else if (!tr.sfx.empty())  ch = Audio::playSfxAt(tr.sfx, sx, sy, 900.f);
+                        if (ch < 0) ch = Audio::playSfxAt("door", sx, sy, 900.f);
+                        if (ch < 0) ch = Audio::playSfxAt("step", sx, sy, 900.f);
+
+                        // Shake + Fade
+                        const float shakeK = (tr.shake > 0.f) ? std::clamp(tr.shake, 0.f, 1.f) : 0.5f;
+                        m_shake = std::min(1.0f, m_shake + shakeK);
+                        Input::rumble(14000, 26000, (Uint32)(80 + 60 * shakeK));
+
+                        m_doorFadeIn = (tr.fadeInMs > 0.f ? tr.fadeInMs : 120.f) / 1000.f;
+                        m_doorFadeOut = (tr.fadeOutMs > 0.f ? tr.fadeOutMs : 140.f) / 1000.f;
+                        m_doorFxActive = true; m_doorFxPhase = 1; m_doorFxT = 0.f; m_doorAlpha = 0.f;
+
+                        pushToast("Door: " + tr.name + " -> " + tr.target, 1.2f);
+                        if (tr.once) m_triggersFired.insert(tr.id);
                     }
                     else { // "region" ve diğer custom türler
-                        if (!tr.message.empty()) {
-                            pushToast(tr.message, 2.2f);
-                            
-                        }
-                        if (tr.zoom > 0.0f) {
-                            m_cam.zoom = std::clamp(tr.zoom, 0.25f, 3.0f);
-                        }
-                        // --- Music region: ENTER (CROSSFADE) ---
+                        if (!tr.message.empty()) pushToast(tr.message, 2.2f);
+                        if (tr.zoom > 0.0f) m_cam.zoom = std::clamp(tr.zoom, 0.25f, 3.0f);
+
+                        // Music region: ENTER → crossfade
                         if (!tr.music.empty()) {
                             if (tr.music != m_musicCurrent) {
                                 m_musicBeforeRegion = m_musicCurrent;
                                 const float vol = std::clamp(tr.musicVol, 0.0f, 1.0f);
-                                const int fin = (tr.musicFadeInMs > 0.f) ? (int)tr.musicFadeInMs: (tr.musicFadeMs > 0.f ? (int)tr.musicFadeMs : 400);
-                                const int fout = (tr.musicFadeOutMs > 0.f) ? (int)tr.musicFadeOutMs: (tr.musicFadeMs > 0.f ? (int)tr.musicFadeMs : 250);
+                                const int fin = (tr.musicFadeInMs > 0.f) ? (int)tr.musicFadeInMs
+                                    : (tr.musicFadeMs > 0.f) ? (int)tr.musicFadeMs : 400;
+                                const int fout = (tr.musicFadeOutMs > 0.f) ? (int)tr.musicFadeOutMs
+                                    : (tr.musicFadeMs > 0.f) ? (int)tr.musicFadeMs : 250;
                                 Audio::crossfadeTo(tr.music, -1, fout, fin, vol);
                                 m_musicCurrent = tr.music;
                             }
                             m_activeMusicRegionId = tr.id;
-                            SDL_Log("MUSIC ENTER region=%s music=%s vol=%.2f fadeIn=%d fadeOut=%d",
-                                tr.name.c_str(), tr.music.c_str(), tr.musicVol,
-                                (int)(tr.musicFadeInMs > 0 ? tr.musicFadeInMs : (tr.musicFadeMs > 0 ? tr.musicFadeMs : 400)),
-                                (int)(tr.musicFadeOutMs > 0 ? tr.musicFadeOutMs : (tr.musicFadeMs > 0 ? tr.musicFadeMs : 250)));
                         }
-                    }
 
-                    if (tr.once) m_triggersFired.insert(tr.id);
+                        if (tr.once) m_triggersFired.insert(tr.id);
+                    }
                 }
                 else if (!now && prev) {
                     // === EXIT ===
                     if (tr.type == "region") {
-                        // yalnızca aktif müzik bölgesinden çıkıyorsak geri dön
-                            if (tr.id == m_activeMusicRegionId) {
+                        if (tr.id == m_activeMusicRegionId) {
                             std::string next = !tr.exitMusic.empty() ? tr.exitMusic : m_musicBeforeRegion;
-                            const int fin = (tr.musicFadeInMs > 0.f) ? (int)tr.musicFadeInMs: (tr.musicFadeMs > 0.f ? (int)tr.musicFadeMs : 400);
-                            const int fout = (tr.musicFadeOutMs > 0.f) ? (int)tr.musicFadeOutMs: (tr.musicFadeMs > 0.f ? (int)tr.musicFadeMs : 250);
+                            const int fin = (tr.musicFadeInMs > 0.f) ? (int)tr.musicFadeInMs
+                                : (tr.musicFadeMs > 0.f) ? (int)tr.musicFadeMs : 400;
+                            const int fout = (tr.musicFadeOutMs > 0.f) ? (int)tr.musicFadeOutMs
+                                : (tr.musicFadeMs > 0.f) ? (int)tr.musicFadeMs : 250;
+
                             if (!next.empty() && next != m_musicCurrent) {
                                 Audio::crossfadeTo(next, -1, fout, fin, 1.0f);
                                 m_musicCurrent = next;
                             }
                             else if (next.empty()) {
-                             // hiçbiri yoksa durdur (fade-out kullan)
                                 Audio::stopMusic(fout);
                                 m_musicCurrent.clear();
-
                             }
                             m_activeMusicRegionId = -1;
                             SDL_Log("MUSIC EXIT region=%s -> next=%s", tr.name.c_str(), m_musicCurrent.c_str());
@@ -566,6 +595,7 @@ namespace Erlik {
                     }
                 }
             }
+
 
             // --- HUD toasts: zaman ilerlet & süresi dolanları at
             for (auto& it : m_toasts) it.t += (float)dt;
@@ -874,6 +904,16 @@ namespace Erlik {
                     m_dbgShowBG ? "on" : "off",
                     m_dbgShowFG ? "on" : "off");
                 m_text.draw(line, xR, yR, cGreen, 1.0f);  yR += dy;
+
+                std::string keyList;
+                for (auto it = m_keys.begin(); it != m_keys.end(); ++it) {
+                    if (it != m_keys.begin()) keyList += ",";
+                    keyList += *it;
+                }
+                std::snprintf(line, sizeof(line), "Keys: %s", keyList.empty() ? "-" : keyList.c_str());
+                m_text.draw(line, xR, yR, cYellow, 1.0f);  yR += dy;
+
+                
 
                 std::snprintf(line, sizeof(line), "COL/Triggers: %s", m_dbgShowCol ? "on" : "off");
                 m_text.draw(line, xR, yR, cYellow, 1.0f); yR += dy;
